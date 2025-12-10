@@ -3,43 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market ANFIS Analyzer</title>
+    <title>Market ANFIS Pro</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e2e; color: #cdd6f4; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #313244; }
-        .controls { background: #313244; padding: 20px; border-radius: 10px; display: flex; gap: 10px; align-items: center; }
-        input[type="text"] { padding: 10px; border-radius: 5px; border: none; background: #45475a; color: white; }
-        button { padding: 10px 20px; border-radius: 5px; border: none; background: #89b4fa; color: #1e1e2e; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #b4befe; }
-        .chart-box { background: #313244; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .loading { color: #f9e2af; display: none; }
+        body { 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background: #131722; /* Ciemne tło jak w TradingView */
+            color: #d1d4dc; 
+            margin: 0; 
+            padding: 20px; 
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 10px; 
+            padding-bottom: 10px; 
+            border-bottom: 1px solid #2a2e39; 
+        }
+        .controls { 
+            display: flex; 
+            gap: 10px; 
+            align-items: center; 
+        }
+        input[type="text"] { 
+            padding: 8px 12px; 
+            border-radius: 4px; 
+            border: 1px solid #363a45; 
+            background: #2a2e39; 
+            color: #fff; 
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: #2962ff; }
+        button { 
+            padding: 8px 20px; 
+            border-radius: 4px; 
+            border: none; 
+            background: #2962ff; 
+            color: #fff; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: 0.2s; 
+        }
+        button:hover { background: #1e53e5; }
+        
+        /* Kontener na wykres zajmuje resztę ekranu */
+        .chart-wrapper { 
+            flex-grow: 1; 
+            background: #1e222d; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            position: relative;
+        }
+        #combinedChart {
+            width: 100%;
+            height: 100%;
+        }
+        .loading { 
+            color: #f0ad4e; 
+            font-size: 0.9em; 
+            margin-left: 10px;
+            display: none; 
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Market Sentiment Oscillator (ANFIS)</h1>
-        </div>
+    <div class="header">
+        <div style="font-size: 1.2em; font-weight: bold;">Investor Assistant <span style="color: #2962ff">ANFIS</span></div>
         
         <div class="controls">
-            <label>Indeks / Aktywo:</label>
-            <input type="text" id="tickerInput" value="^GSPC" placeholder="np. ^GSPC, ^NDX">
-            <button onclick="runAnalysis()">Analizuj</button>
-            <span id="loadingMsg" class="loading">Pobieranie danych i obliczanie logiki rozmytej...</span>
-        </div>
-
-        <div class="chart-box">
-            <div id="priceChart" style="height: 500px;"></div>
-        </div>
-        
-        <div class="chart-box">
-            <div id="sentimentChart" style="height: 300px;"></div>
+            <input type="text" id="tickerInput" value="^GSPC" placeholder="Symbol (np. ^NDX)">
+            <button onclick="runAnalysis()">Analizuj Rynek</button>
+            <span id="loadingMsg" class="loading">Przetwarzanie danych makro i AI...</span>
         </div>
     </div>
 
+    <div class="chart-wrapper">
+        <div id="combinedChart"></div>
+    </div>
+
     <script>
+        // Uruchomienie domyślnej analizy przy starcie
+        window.onload = function() {
+            runAnalysis();
+        };
+
         async function runAnalysis() {
             const ticker = document.getElementById('tickerInput').value;
             const loading = document.getElementById('loadingMsg');
@@ -54,63 +106,112 @@
                 });
                 
                 const data = await response.json();
-                if(data.error) { alert(data.error); return; }
+                if(data.error) { alert("Błąd: " + data.error); return; }
                 
-                drawCharts(data);
+                drawCombinedChart(data);
             } catch (err) {
-                alert("Błąd połączenia: " + err);
+                console.error(err);
+                alert("Błąd połączenia z serwerem.");
             } finally {
                 loading.style.display = 'none';
             }
         }
 
-        function drawCharts(data) {
-            // 1. Wykres Ceny
+        function drawCombinedChart(data) {
+            // --- DANE ---
+            
+            // 1. Cena (Górny panel)
             const tracePrice = {
                 x: data.Date,
                 y: data.Price,
+                name: 'Cena',
                 type: 'scatter',
                 mode: 'lines',
-                name: 'Cena',
-                line: { color: '#89b4fa', width: 2 }
-            };
-            
-            const layoutPrice = {
-                title: 'Wykres Ceny Aktywa',
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                font: { color: '#cdd6f4' },
-                xaxis: { gridcolor: '#45475a' },
-                yaxis: { gridcolor: '#45475a' }
+                line: { color: '#2962ff', width: 2 },
+                xaxis: 'x',
+                yaxis: 'y' // Przypisane do pierwszej osi Y
             };
 
-            // 2. Wykres Oscylatora ANFIS
-            const traceSentiment = {
+            // 2. Oscylator ANFIS (Dolny panel)
+            const traceOscillator = {
                 x: data.Date,
                 y: data.Sentiment_Oscillator,
+                name: 'ANFIS Sentiment',
                 type: 'scatter',
                 mode: 'lines',
-                name: 'Sentyment (ANFIS)',
                 line: { color: '#f38ba8', width: 2 },
-                fill: 'tozeroy'
+                fill: 'tozeroy', // Wypełnienie kolorem pod wykresem
+                fillcolor: 'rgba(243, 139, 168, 0.1)',
+                xaxis: 'x',
+                yaxis: 'y2' // Przypisane do drugiej osi Y (Subplot)
             };
-            
-            // Dodajemy poziomy wyprzedania/wykupienia
-            const layoutSentiment = {
-                title: 'Twój Oscylator Nastrojów (0-100)',
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                font: { color: '#cdd6f4' },
-                yaxis: { range: [0, 100], gridcolor: '#45475a' },
-                xaxis: { gridcolor: '#45475a' },
+
+            // --- UKŁAD (LAYOUT) ---
+            const layout = {
+                grid: {
+                    rows: 2, 
+                    columns: 1, 
+                    pattern: 'independent',
+                    roworder: 'top to bottom'
+                },
+                // Marginesy i tło
+                margin: { t: 40, b: 40, l: 60, r: 40 },
+                paper_bgcolor: '#131722',
+                plot_bgcolor: '#1e222d',
+                font: { color: '#d1d4dc' },
+                
+                // Interakcja
+                hovermode: 'x unified', // TO JEST KLUCZ DO SYNCHRONIZACJI
+                dragmode: 'zoom',
+                
+                // Oś X (Wspólna)
+                xaxis: {
+                    showgrid: true,
+                    gridcolor: '#2a2e39',
+                    rangeslider: { visible: false }, // Wyłączamy slider bo zabiera miejsce
+                    anchor: 'y2' // Oś X jest pod dolnym wykresem
+                },
+
+                // Oś Y1 (Cena - Górne 70% ekranu)
+                yaxis: {
+                    domain: [0.35, 1], // Od 35% do 100% wysokości
+                    gridcolor: '#2a2e39',
+                    title: 'Cena Aktywa'
+                },
+
+                // Oś Y2 (Oscylator - Dolne 25% ekranu)
+                yaxis2: {
+                    domain: [0, 0.25], // Od 0% do 25% wysokości
+                    gridcolor: '#2a2e39',
+                    title: 'Sentyment (0-100)',
+                    range: [0, 100], // Sztywny zakres dla oscylatora
+                    fixedrange: true // Blokada zoomowania w pionie dla oscylatora
+                },
+                
+                // Linie pomocnicze na oscylatorze
                 shapes: [
-                    { type: 'line', y0: 25, y1: 25, x0: data.Date[0], x1: data.Date[data.Date.length-1], line: {color: 'green', dash:'dot'} },
-                    { type: 'line', y0: 75, y1: 75, x0: data.Date[0], x1: data.Date[data.Date.length-1], line: {color: 'red', dash:'dot'} }
+                    // Linia 20 (Zielona strefa okazji)
+                    {
+                        type: 'line', xref: 'paper', x0: 0, x1: 1,
+                        yref: 'y2', y0: 20, y1: 20,
+                        line: { color: 'rgba(0, 255, 0, 0.3)', width: 1, dash: 'dot' }
+                    },
+                    // Linia 80 (Czerwona strefa ryzyka)
+                    {
+                        type: 'line', xref: 'paper', x0: 0, x1: 1,
+                        yref: 'y2', y0: 80, y1: 80,
+                        line: { color: 'rgba(255, 0, 0, 0.3)', width: 1, dash: 'dot' }
+                    }
                 ]
             };
 
-            Plotly.newPlot('priceChart', [tracePrice], layoutPrice);
-            Plotly.newPlot('sentimentChart', [traceSentiment], layoutSentiment);
+            const config = {
+                responsive: true,
+                displayModeBar: true, // Pasek narzędzi (zoom, pan, etc.)
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            };
+
+            Plotly.newPlot('combinedChart', [tracePrice, traceOscillator], layout, config);
         }
     </script>
 </body>
