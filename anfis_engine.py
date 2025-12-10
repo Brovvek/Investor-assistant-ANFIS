@@ -7,50 +7,72 @@ class AnfisEngine:
         self.simulation = None
 
     def build_system(self):
-        # --- Zmienne wejściowe ---
-        # Inflacja (CPI YoY) - zakres 0% do 15%
-        inflation = ctrl.Antecedent(np.arange(0, 15, 0.1), 'inflation')
-        # Bezrobocie (UNRATE) - zakres 0% do 15%
-        unemployment = ctrl.Antecedent(np.arange(0, 15, 0.1), 'unemployment')
+        # --- WEJŚCIA (Znormalizowane do 0-100) ---
         
-        # --- Zmienna wyjściowa (Twój Oscylator) ---
-        sentiment = ctrl.Consequent(np.arange(0, 101, 1), 'sentiment')
+        # 1. RSI (Technika): 0-30 (Tanio), 70-100 (Drogo)
+        rsi = ctrl.Antecedent(np.arange(0, 101, 1), 'rsi')
+        
+        # 2. VIX Rank (Strach): 0 (Spokój), 100 (Panika)
+        vix = ctrl.Antecedent(np.arange(0, 101, 1), 'vix')
+        
+        # 3. Yield Rank (Makro): 0 (Recesja/Inwersja), 100 (Zdrowy wzrost)
+        yield_curve = ctrl.Antecedent(np.arange(0, 101, 1), 'yield')
 
-        # --- Funkcje przynależności (Automatyczne) ---
-        inflation.automf(3, names=['low', 'medium', 'high'])
-        unemployment.automf(3, names=['low', 'medium', 'high'])
+        # --- WYJŚCIE ---
+        # Signal: 0 (Silne Sprzedaj / Przewartościowanie), 100 (Silne Kupuj / Okazja)
+        signal = ctrl.Consequent(np.arange(0, 101, 1), 'signal')
 
-        # Definicja wyjścia
-        sentiment['bearish'] = fuzz.trimf(sentiment.universe, [0, 0, 50])
-        sentiment['neutral'] = fuzz.trimf(sentiment.universe, [25, 50, 75])
-        sentiment['bullish'] = fuzz.trimf(sentiment.universe, [50, 100, 100])
+        # --- FUNKCJE PRZYNALEŻNOŚCI ---
+        
+        # RSI
+        rsi['oversold'] = fuzz.trimf(rsi.universe, [0, 0, 35])      # Wyprzedanie
+        rsi['neutral'] = fuzz.trimf(rsi.universe, [30, 50, 70])
+        rsi['overbought'] = fuzz.trimf(rsi.universe, [65, 100, 100]) # Wykupienie
 
-        # --- Reguły Logiczne (Przykładowa logika rynkowa) ---
-        # 1. Niska inflacja + Niskie bezrobocie = Idealne warunki (Hossa)
-        rule1 = ctrl.Rule(inflation['low'] & unemployment['low'], sentiment['bullish'])
-        # 2. Wysoka inflacja + Wysokie bezrobocie = Stagflacja (Bessa)
-        rule2 = ctrl.Rule(inflation['high'] & unemployment['high'], sentiment['bearish'])
-        # 3. Wysoka inflacja (niezależnie od bezrobocia) = Strach przed stopami proc.
-        rule3 = ctrl.Rule(inflation['high'], sentiment['bearish'])
-        # 4. Inne przypadki = Neutralne
-        rule4 = ctrl.Rule(inflation['medium'], sentiment['neutral'])
+        # VIX (Strach) - Tu uwaga: Wysoki VIX to często dołek cenowy (Okazja)
+        vix['calm'] = fuzz.trimf(vix.universe, [0, 0, 40])
+        vix['fear'] = fuzz.trimf(vix.universe, [60, 100, 100])
 
-        sentiment_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4])
-        self.simulation = ctrl.ControlSystemSimulation(sentiment_ctrl)
+        # Yield Curve (Makro)
+        yield_curve['inverted'] = fuzz.trimf(yield_curve.universe, [0, 0, 40]) # Ryzyko
+        yield_curve['normal'] = fuzz.trimf(yield_curve.universe, [50, 100, 100]) # Zdrowo
 
-    def compute_sentiment(self, inflation_val, unemployment_val):
+        # Wyjście
+        signal['bearish'] = fuzz.trimf(signal.universe, [0, 0, 50])
+        signal['neutral'] = fuzz.trimf(signal.universe, [40, 50, 60])
+        signal['bullish'] = fuzz.trimf(signal.universe, [50, 100, 100])
+
+        # --- BAZA REGUŁ (Mózg systemu) ---
+        
+        rules = []
+        
+        # R1: "Kupuj gdy krew się leje" (Niskie RSI + Duży Strach na VIX)
+        rules.append(ctrl.Rule(rsi['oversold'] & vix['fear'], signal['bullish']))
+        
+        # R2: "Sprzedawaj w euforii" (Wysokie RSI + VIX bardzo niski/spokojny)
+        rules.append(ctrl.Rule(rsi['overbought'] & vix['calm'], signal['bearish']))
+        
+        # R3: "Ostrzeżenie Makro" (Inwersja krzywej = Bądź ostrożny nawet jak jest tanio)
+        # To reguła, która "psuje" zabawę bykom, jeśli gospodarka ma się zawalić
+        rules.append(ctrl.Rule(yield_curve['inverted'] & rsi['neutral'], signal['bearish']))
+
+        # R4: Trend wzrostowy (Zdrowa krzywa + RSI neutralne = Powolny wzrost)
+        rules.append(ctrl.Rule(yield_curve['normal'] & rsi['neutral'], signal['bullish']))
+
+        # Budowa systemu
+        system = ctrl.ControlSystem(rules)
+        self.simulation = ctrl.ControlSystemSimulation(system)
+
+    def compute(self, rsi_val, vix_rank, yield_rank):
         if self.simulation is None:
             self.build_system()
             
-        # Zabezpieczenie przed wartościami spoza zakresu (clip)
-        i_val = np.clip(inflation_val, 0, 14.9)
-        u_val = np.clip(unemployment_val, 0, 14.9)
-        
-        self.simulation.input['inflation'] = i_val
-        self.simulation.input['unemployment'] = u_val
+        self.simulation.input['rsi'] = np.clip(rsi_val, 0, 100)
+        self.simulation.input['vix'] = np.clip(vix_rank, 0, 100)
+        self.simulation.input['yield'] = np.clip(yield_rank, 0, 100)
         
         try:
             self.simulation.compute()
-            return self.simulation.output['sentiment']
+            return self.simulation.output['signal']
         except:
-            return 50.0 # Wartość neutralna w razie błędu
+            return 50.0

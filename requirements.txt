@@ -5,3 +5,5 @@ fredapi
 scikit-fuzzy
 scipy
 numpy
+networkx
+packaging

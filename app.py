@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 # --- KONFIGURACJA ---
 # PAMIĘTAJ: Wklej tutaj swój klucz API z fred.stlouisfed.org
-FRED_API_KEY = 'b7d804e08b899c4a8c9fdfff48dfdad8pytho' 
+FRED_API_KEY = 'b7d804e08b899c4a8c9fdfff48dfdad8' 
 
 data_engine = DataEngine(FRED_API_KEY)
 anfis_engine = AnfisEngine()
@@ -17,58 +17,68 @@ anfis_engine = AnfisEngine()
 def index():
     return render_template('dashboard.html')
 
+
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     
-    # 1. Pobieranie danych
     try:
-        # Pobieramy dane rynkowe i makro
-        # Domyślny zestaw wskaźników makro do korelacji
-        macro_config = {
-            'M2SL': 'yoy',        # Podaż pieniądza (zmiana roczna)
-            'FEDFUNDS': 'raw',    # Stopy procentowe
-            'CPIAUCSL': 'yoy',    # Inflacja
-            'UNRATE': 'raw',      # Bezrobocie
-            'T10Y2Y': 'raw'       # Krzywa dochodowości
-        }
-        
-        df = data_engine.prepare_dataset(ticker, macro_config)
+        # 1. Pobieranie danych (Teraz DataEngine pobiera RSI, VIX i Yield)
+        df = data_engine.prepare_dataset(ticker)
         
         if df.empty:
-            return jsonify({"error": "Brak danych dla podanych parametrów."}), 400
+            return jsonify({"error": "Brak danych"}), 400
 
-        # 2. Analiza ANFIS (Generowanie Oscylatora Nastrojów)
-        # Dla wydajności obliczamy to tylko dla ostatnich 200 dni w tym demo
-        df_analysis = df.tail(200).copy()
-        sentiments = []
+        # 2. Normalizacja danych wejściowych do skali 0-100 dla ANFIS
+        # Używamy okna 2-letniego (504 dni handlowe), aby określić co jest "Wysoko" a co "Nisko"
+        window = 504
         
-        # Budujemy system rozmyty
-        anfis_engine.build_system()
-        
-        for index, row in df_analysis.iterrows():
-            # Przekazujemy Inflację i Bezrobocie do systemu ANFIS
-            # W prawdziwej aplikacji te wejścia byłyby dynamicznie wybierane przez użytkownika
-            val = anfis_engine.compute_sentiment(
-                inflation_val=row.get('CPIAUCSL', 2.0), 
-                unemployment_val=row.get('UNRATE', 4.0)
+        # Funkcja pomocnicza do normalizacji MinMax w oknie rolowanym
+        def normalize_rolling(series):
+            return series.rolling(window).apply(
+                lambda x: (x[-1] - x.min()) / (x.max() - x.min()) * 100 if (x.max() - x.min()) != 0 else 50, 
+                raw=True
             )
-            sentiments.append(val)
-            
-        df_analysis['Sentiment_Oscillator'] = sentiments
 
-        # 3. Przygotowanie odpowiedzi JSON
+        # Normalizujemy VIX (0=Min strach w ostatnich 2 latach, 100=Max strach)
+        df['VIX_Rank'] = normalize_rolling(df['VIX'])
+        
+        # Normalizujemy Yield Curve (0=Najniższa/Inwersja, 100=Najwyższa/Stroma)
+        df['Yield_Rank'] = normalize_rolling(df['Yield_Curve'])
+        
+        # Usuwamy puste wiersze na początku (brak danych do normalizacji)
+        df.dropna(inplace=True)
+
+        # 3. Obliczenia ANFIS
+        anfis_engine.build_system()
+        oscillator_values = []
+        
+        # Analizujemy ostatnie 5 lat (ok 1260 dni)
+        df_analysis = df.tail(1260).copy()
+        
+        print("Rozpoczynanie analizy ANFIS...")
+        for index, row in df_analysis.iterrows():
+            score = anfis_engine.compute(
+                rsi_val=row['RSI'],          # Technika
+                vix_rank=row['VIX_Rank'],    # Sentyment
+                yield_rank=row['Yield_Rank'] # Makro
+            )
+            oscillator_values.append(score)
+            
+        df_analysis['Sentiment_Oscillator'] = oscillator_values
+
+        # 4. Formatowanie wyniku
+        df_analysis.index.name = 'Date'
         df_analysis.reset_index(inplace=True)
         df_analysis['Date'] = df_analysis['Date'].dt.strftime('%Y-%m-%d')
         
         return jsonify(df_analysis.to_dict(orient='list'))
 
     except Exception as e:
-        print(f"Błąd: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
 if __name__ == '__main__':
     print("Uruchamianie serwera...")
-    print("Pamiętaj o dodaniu klucza FRED API w pliku app.py!")
     app.run(debug=True)
