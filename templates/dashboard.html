@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market ANFIS Analyzer</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e2e; color: #cdd6f4; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #313244; }
+        .controls { background: #313244; padding: 20px; border-radius: 10px; display: flex; gap: 10px; align-items: center; }
+        input[type="text"] { padding: 10px; border-radius: 5px; border: none; background: #45475a; color: white; }
+        button { padding: 10px 20px; border-radius: 5px; border: none; background: #89b4fa; color: #1e1e2e; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #b4befe; }
+        .chart-box { background: #313244; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .loading { color: #f9e2af; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Market Sentiment Oscillator (ANFIS)</h1>
+        </div>
+        
+        <div class="controls">
+            <label>Indeks / Aktywo:</label>
+            <input type="text" id="tickerInput" value="^GSPC" placeholder="np. ^GSPC, ^NDX">
+            <button onclick="runAnalysis()">Analizuj</button>
+            <span id="loadingMsg" class="loading">Pobieranie danych i obliczanie logiki rozmytej...</span>
+        </div>
+
+        <div class="chart-box">
+            <div id="priceChart" style="height: 500px;"></div>
+        </div>
+        
+        <div class="chart-box">
+            <div id="sentimentChart" style="height: 300px;"></div>
+        </div>
+    </div>
+
+    <script>
+        async function runAnalysis() {
+            const ticker = document.getElementById('tickerInput').value;
+            const loading = document.getElementById('loadingMsg');
+            
+            loading.style.display = 'inline';
+            
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker: ticker })
+                });
+                
+                const data = await response.json();
+                if(data.error) { alert(data.error); return; }
+                
+                drawCharts(data);
+            } catch (err) {
+                alert("Błąd połączenia: " + err);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function drawCharts(data) {
+            // 1. Wykres Ceny
+            const tracePrice = {
+                x: data.Date,
+                y: data.Price,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Cena',
+                line: { color: '#89b4fa', width: 2 }
+            };
+            
+            const layoutPrice = {
+                title: 'Wykres Ceny Aktywa',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#cdd6f4' },
+                xaxis: { gridcolor: '#45475a' },
+                yaxis: { gridcolor: '#45475a' }
+            };
+
+            // 2. Wykres Oscylatora ANFIS
+            const traceSentiment = {
+                x: data.Date,
+                y: data.Sentiment_Oscillator,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Sentyment (ANFIS)',
+                line: { color: '#f38ba8', width: 2 },
+                fill: 'tozeroy'
+            };
+            
+            // Dodajemy poziomy wyprzedania/wykupienia
+            const layoutSentiment = {
+                title: 'Twój Oscylator Nastrojów (0-100)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#cdd6f4' },
+                yaxis: { range: [0, 100], gridcolor: '#45475a' },
+                xaxis: { gridcolor: '#45475a' },
+                shapes: [
+                    { type: 'line', y0: 25, y1: 25, x0: data.Date[0], x1: data.Date[data.Date.length-1], line: {color: 'green', dash:'dot'} },
+                    { type: 'line', y0: 75, y1: 75, x0: data.Date[0], x1: data.Date[data.Date.length-1], line: {color: 'red', dash:'dot'} }
+                ]
+            };
+
+            Plotly.newPlot('priceChart', [tracePrice], layoutPrice);
+            Plotly.newPlot('sentimentChart', [traceSentiment], layoutSentiment);
+        }
+    </script>
+</body>
+</html>

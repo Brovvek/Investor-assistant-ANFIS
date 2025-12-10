@@ -1,0 +1,7 @@
+flask
+pandas
+yfinance
+fredapi
+scikit-fuzzy
+scipy
+numpy
