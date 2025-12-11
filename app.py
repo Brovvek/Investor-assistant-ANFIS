@@ -1,13 +1,14 @@
 from flask import Flask, render_template, jsonify, request
 from data_engine import DataEngine
 from anfis_engine import AnfisEngine
+from flask_cors import CORS
 import pandas as pd
 import json
 
 app = Flask(__name__)
+CORS(app)
 
 # --- KONFIGURACJA ---
-# PAMIĘTAJ: Wklej tutaj swój klucz API z fred.stlouisfed.org
 FRED_API_KEY = 'b7d804e08b899c4a8c9fdfff48dfdad8' 
 
 data_engine = DataEngine(FRED_API_KEY)
@@ -79,6 +80,30 @@ def analyze():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/tickers', methods=['GET'])
+def get_available_tickers():
+    """Zwraca listę popularnych tickerów dla autouzupełniania."""
+    
+    # Dane zebrane ręcznie - można je rozbudować o pobieranie z zewnętrznego źródła
+    tickers = [
+        {"symbol": "^GSPC", "name": "S&P 500 Index (USA)"},
+        {"symbol": "^NDX", "name": "Nasdaq 100 Index (USA)"},
+        {"symbol": "^DJI", "name": "Dow Jones Industrial Average"},
+        {"symbol": "^WIG20", "name": "WIG20 Index (Polska)"},
+        {"symbol": "BTC-USD", "name": "Bitcoin / USD"},
+        {"symbol": "ETH-USD", "name": "Ethereum / USD"},
+        {"symbol": "GLD", "name": "SPDR Gold Shares (Złoto)"},
+        {"symbol": "TLT", "name": "20+ Year Treasury Bond (Obligacje)"},
+        {"symbol": "EURPLN=X", "name": "EUR/PLN Kurs Walutowy"},
+        {"symbol": "AAPL", "name": "Apple Inc."},
+        {"symbol": "MSFT", "name": "Microsoft Corp."},
+        {"symbol": "TSLA", "name": "Tesla, Inc."}
+    ]
+    
+    return jsonify(tickers)
+
+
 if __name__ == '__main__':
     print("Uruchamianie serwera...")
     app.run(debug=True)

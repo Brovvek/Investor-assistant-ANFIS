@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market ANFIS Pro</title>
+    <title>Market ANFIS Pro - Full Analysis</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         body { 
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            background: #131722; /* Ciemne tło jak w TradingView */
+            background: #131722; 
             color: #d1d4dc; 
             margin: 0; 
             padding: 20px; 
@@ -25,10 +25,18 @@
             padding-bottom: 10px; 
             border-bottom: 1px solid #2a2e39; 
         }
-        .controls { 
-            display: flex; 
+        .controls-center {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .controls {
+            display: flex;
             gap: 10px; 
             align-items: center; 
+            background: #1e222d;
+            padding: 10px;
+            border-radius: 8px;
         }
         input[type="text"] { 
             padding: 8px 12px; 
@@ -36,9 +44,9 @@
             border: 1px solid #363a45; 
             background: #2a2e39; 
             color: #fff; 
+            width: 250px;
             outline: none;
         }
-        input[type="text"]:focus { border-color: #2962ff; }
         button { 
             padding: 8px 20px; 
             border-radius: 4px; 
@@ -47,11 +55,9 @@
             color: #fff; 
             font-weight: 600; 
             cursor: pointer; 
-            transition: 0.2s; 
         }
         button:hover { background: #1e53e5; }
         
-        /* Kontener na wykres zajmuje resztę ekranu */
         .chart-wrapper { 
             flex-grow: 1; 
             background: #1e222d; 
@@ -59,26 +65,21 @@
             overflow: hidden; 
             position: relative;
         }
-        #combinedChart {
-            width: 100%;
-            height: 100%;
-        }
-        .loading { 
-            color: #f0ad4e; 
-            font-size: 0.9em; 
-            margin-left: 10px;
-            display: none; 
-        }
+        #combinedChart { width: 100%; height: 100%; }
+        .loading { color: #f0ad4e; font-size: 0.9em; display: none; margin-left: 10px;}
     </style>
 </head>
 <body>
     <div class="header">
-        <div style="font-size: 1.2em; font-weight: bold;">Investor Assistant <span style="color: #2962ff">ANFIS</span></div>
-        
+        <div style="font-size: 1.2em; font-weight: bold;">Investor Assistant <span style="color: #2962ff">ANFIS</span> Full View</div>
+    </div>
+    
+    <div class="controls-center">
         <div class="controls">
-            <input type="text" id="tickerInput" value="^GSPC" placeholder="Symbol (np. ^NDX)">
+            <input type="text" id="tickerInput" value="^GSPC" placeholder="Symbol (np. ^NDX, BTC-USD)" list="ticker-list">
+            <datalist id="ticker-list"></datalist>
             <button onclick="runAnalysis()">Analizuj Rynek</button>
-            <span id="loadingMsg" class="loading">Przetwarzanie danych makro i AI...</span>
+            <span id="loadingMsg" class="loading">Pobieranie i przetwarzanie...</span>
         </div>
     </div>
 
@@ -87,15 +88,31 @@
     </div>
 
     <script>
-        // Uruchomienie domyślnej analizy przy starcie
+        let availableTickers = [];
+
+        async function loadTickers() {
+            try {
+                const response = await fetch('/api/tickers');
+                availableTickers = await response.json();
+                const datalist = document.getElementById('ticker-list');
+                datalist.innerHTML = '';
+                availableTickers.forEach(ticker => {
+                    const option = document.createElement('option');
+                    option.value = ticker.symbol;
+                    option.textContent = `${ticker.symbol} (${ticker.name})`;
+                    datalist.appendChild(option);
+                });
+            } catch (err) { console.error(err); }
+        }
+
         window.onload = function() {
+            loadTickers();
             runAnalysis();
         };
 
         async function runAnalysis() {
             const ticker = document.getElementById('tickerInput').value;
             const loading = document.getElementById('loadingMsg');
-            
             loading.style.display = 'inline';
             
             try {
@@ -108,110 +125,120 @@
                 const data = await response.json();
                 if(data.error) { alert("Błąd: " + data.error); return; }
                 
-                drawCombinedChart(data);
+                drawFullChart(data);
             } catch (err) {
-                console.error(err);
-                alert("Błąd połączenia z serwerem.");
+                alert("Błąd połączenia.");
             } finally {
                 loading.style.display = 'none';
             }
         }
 
-        function drawCombinedChart(data) {
-            // --- DANE ---
-            
-            // 1. Cena (Górny panel)
+        function drawFullChart(data) {
+            // --- TRACES (Serie Danych) ---
+
+            // 1. Cena (Panel 1)
             const tracePrice = {
-                x: data.Date,
-                y: data.Price,
-                name: 'Cena',
-                type: 'scatter',
-                mode: 'lines',
+                x: data.Date, y: data.Price,
+                name: 'Cena', type: 'scatter', mode: 'lines',
                 line: { color: '#2962ff', width: 2 },
-                xaxis: 'x',
-                yaxis: 'y' // Przypisane do pierwszej osi Y
+                xaxis: 'x', yaxis: 'y'
             };
 
-            // 2. Oscylator ANFIS (Dolny panel)
-            const traceOscillator = {
-                x: data.Date,
-                y: data.Sentiment_Oscillator,
-                name: 'ANFIS Sentiment',
-                type: 'scatter',
-                mode: 'lines',
+            // 2. ANFIS Wynik (Panel 2)
+            const traceAnfis = {
+                x: data.Date, y: data.Sentiment_Oscillator,
+                name: 'ANFIS (Wynik)', type: 'scatter', mode: 'lines',
                 line: { color: '#f38ba8', width: 2 },
-                fill: 'tozeroy', // Wypełnienie kolorem pod wykresem
-                fillcolor: 'rgba(243, 139, 168, 0.1)',
-                xaxis: 'x',
-                yaxis: 'y2' // Przypisane do drugiej osi Y (Subplot)
+                fill: 'tozeroy', fillcolor: 'rgba(243, 139, 168, 0.1)',
+                xaxis: 'x', yaxis: 'y2'
             };
 
-            // --- UKŁAD (LAYOUT) ---
+            // 3. RSI (Panel 3)
+            const traceRSI = {
+                x: data.Date, y: data.RSI,
+                name: 'RSI (Technika)', type: 'scatter', mode: 'lines',
+                line: { color: '#cba6f7', width: 1.5 },
+                xaxis: 'x', yaxis: 'y3'
+            };
+
+            // 4. VIX (Panel 4 - Oś Lewa)
+            const traceVIX = {
+                x: data.Date, y: data.VIX,
+                name: 'VIX (Strach)', type: 'scatter', mode: 'lines',
+                line: { color: '#fab387', width: 1.5 },
+                xaxis: 'x', yaxis: 'y4'
+            };
+
+            // 5. Yield Curve (Panel 4 - Oś Prawa)
+            const traceYield = {
+                x: data.Date, y: data.Yield_Curve,
+                name: '10Y-2Y Spread (Makro)', type: 'scatter', mode: 'lines',
+                line: { color: '#a6e3a1', width: 1.5, dash: 'dot' },
+                xaxis: 'x', yaxis: 'y5'
+            };
+
+            // --- LAYOUT ---
             const layout = {
                 grid: {
-                    rows: 2, 
-                    columns: 1, 
-                    pattern: 'independent',
+                    rows: 4, columns: 1, 
+                    pattern: 'independent', // Niezależne osie Y
                     roworder: 'top to bottom'
                 },
-                // Marginesy i tło
-                margin: { t: 40, b: 40, l: 60, r: 40 },
+                margin: { t: 30, b: 30, l: 60, r: 50 },
                 paper_bgcolor: '#131722',
                 plot_bgcolor: '#1e222d',
                 font: { color: '#d1d4dc' },
-                
-                // Interakcja
-                hovermode: 'x unified', // TO JEST KLUCZ DO SYNCHRONIZACJI
-                dragmode: 'zoom',
-                
+                hovermode: 'x unified', // Synchronizacja kursora
+
                 // Oś X (Wspólna)
-                xaxis: {
-                    showgrid: true,
-                    gridcolor: '#2a2e39',
-                    rangeslider: { visible: false }, // Wyłączamy slider bo zabiera miejsce
-                    anchor: 'y2' // Oś X jest pod dolnym wykresem
+                xaxis: { anchor: 'y4', showgrid: true, gridcolor: '#2a2e39' },
+
+                // PANEL 1: Cena (40% wysokości)
+                yaxis: { 
+                    domain: [0.62, 1], 
+                    title: 'Cena', gridcolor: '#2a2e39' 
                 },
 
-                // Oś Y1 (Cena - Górne 70% ekranu)
-                yaxis: {
-                    domain: [0.35, 1], // Od 35% do 100% wysokości
-                    gridcolor: '#2a2e39',
-                    title: 'Cena Aktywa'
+                // PANEL 2: ANFIS (20% wysokości)
+                yaxis2: { 
+                    domain: [0.42, 0.60], 
+                    title: 'ANFIS', range: [0, 100], gridcolor: '#2a2e39' 
                 },
 
-                // Oś Y2 (Oscylator - Dolne 25% ekranu)
-                yaxis2: {
-                    domain: [0, 0.25], // Od 0% do 25% wysokości
-                    gridcolor: '#2a2e39',
-                    title: 'Sentyment (0-100)',
-                    range: [0, 100], // Sztywny zakres dla oscylatora
-                    fixedrange: true // Blokada zoomowania w pionie dla oscylatora
+                // PANEL 3: RSI (15% wysokości)
+                yaxis3: { 
+                    domain: [0.22, 0.40], 
+                    title: 'RSI', range: [0, 100], gridcolor: '#2a2e39',
+                    tickvals: [30, 70], ticktext: ['30', '70'] // Linie RSI
+                },
+
+                // PANEL 4: Makro (20% wysokości) - Dwie osie Y
+                yaxis4: { 
+                    domain: [0, 0.20], 
+                    title: 'VIX', titlefont: {color: '#fab387'}, 
+                    gridcolor: '#2a2e39' 
+                },
+                yaxis5: { 
+                    domain: [0, 0.20], 
+                    title: 'Yield', titlefont: {color: '#a6e3a1'},
+                    overlaying: 'y4', side: 'right', // Nakładamy na VIX
+                    showgrid: false
                 },
                 
-                // Linie pomocnicze na oscylatorze
+                // Linie referencyjne
                 shapes: [
-                    // Linia 20 (Zielona strefa okazji)
-                    {
-                        type: 'line', xref: 'paper', x0: 0, x1: 1,
-                        yref: 'y2', y0: 20, y1: 20,
-                        line: { color: 'rgba(0, 255, 0, 0.3)', width: 1, dash: 'dot' }
-                    },
-                    // Linia 80 (Czerwona strefa ryzyka)
-                    {
-                        type: 'line', xref: 'paper', x0: 0, x1: 1,
-                        yref: 'y2', y0: 80, y1: 80,
-                        line: { color: 'rgba(255, 0, 0, 0.3)', width: 1, dash: 'dot' }
-                    }
+                    // Linie dla ANFIS (20/80)
+                    { type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 20, y1: 20, line: { color: 'green', width: 1, dash: 'dot' } },
+                    { type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 80, y1: 80, line: { color: 'red', width: 1, dash: 'dot' } },
+                    // Linie dla RSI (30/70)
+                    { type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y3', y0: 30, y1: 30, line: { color: 'white', width: 0.5, dash: 'dot' } },
+                    { type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y3', y0: 70, y1: 70, line: { color: 'white', width: 0.5, dash: 'dot' } },
+                    // Linia 0 dla Yield Curve (Recesja)
+                    { type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y5', y0: 0, y1: 0, line: { color: 'red', width: 1 } },
                 ]
             };
 
-            const config = {
-                responsive: true,
-                displayModeBar: true, // Pasek narzędzi (zoom, pan, etc.)
-                modeBarButtonsToRemove: ['lasso2d', 'select2d']
-            };
-
-            Plotly.newPlot('combinedChart', [tracePrice, traceOscillator], layout, config);
+            Plotly.newPlot('combinedChart', [tracePrice, traceAnfis, traceRSI, traceVIX, traceYield], layout, {responsive: true});
         }
     </script>
 </body>
