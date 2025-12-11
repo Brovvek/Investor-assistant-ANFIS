@@ -24,6 +24,13 @@ def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     
+    # Pobieramy konfigurację wag od użytkownika (domyślnie 1.0 jeśli brak)
+    user_config = req_data.get('config', {
+        'rsi': {'enabled': True, 'weight': 1.0},
+        'vix': {'enabled': True, 'weight': 1.0},
+        'yield': {'enabled': True, 'weight': 1.0}
+    })
+    
     try:
         # 1. Pobieranie danych (Teraz DataEngine pobiera RSI, VIX i Yield)
         df = data_engine.prepare_dataset(ticker)
@@ -52,7 +59,8 @@ def analyze():
         df.dropna(inplace=True)
 
         # 3. Obliczenia ANFIS
-        anfis_engine.build_system()
+        anfis_engine.build_system(user_config) 
+        
         oscillator_values = []
         
         # Analizujemy ostatnie 5 lat (ok 1260 dni)

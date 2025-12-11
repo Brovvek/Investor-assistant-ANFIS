@@ -160,3 +160,56 @@ button:disabled {
 }
 .tooltip-desc { font-size: 0.9em; margin-bottom: 10px; color: #b2b5be; }
 .tooltip-val { font-size: 0.85em; display: block; margin-top: 4px; }
+
+/* Styl dla kafelka sterującego */
+.control-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 15px;
+  background: #1e222d;
+  border-radius: 8px;
+  transition: 0.3s;
+}
+
+/* Stan wyłączony (szary) */
+.control-badge.disabled {
+  background: #161920;
+  opacity: 0.6;
+  border-left-color: #444 !important;
+}
+
+/* Kontener suwaka */
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid #363a45;
+}
+
+/* Stylizacja suwaka (range) */
+input[type=range] {
+  width: 80px;
+  height: 4px;
+  background: #363a45;
+  border-radius: 2px;
+  outline: none;
+  appearance: none; /* Reset domyślnego stylu */
+}
+
+input[type=range]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.weight-label {
+  font-size: 0.8em;
+  color: #888;
+  min-width: 30px;
+}

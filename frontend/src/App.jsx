@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import MarketChart from './MarketChart';
-import './App.css';
 import InfoBadges from './InfoBadges';
+import './App.css';
 
 function App() {
   const [ticker, setTicker] = useState('^GSPC');
@@ -12,30 +12,35 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 1. Pobierz listę tickerów przy starcie
+  // NOWOŚĆ: Stan konfiguracji wag i aktywności
+  const [indicatorsConfig, setIndicatorsConfig] = useState({
+    rsi:   { enabled: true, weight: 1.0 },
+    vix:   { enabled: true, weight: 1.0 },
+    yield: { enabled: true, weight: 1.0 }
+  });
+
+  // Pobieranie tickerów (bez zmian)
   useEffect(() => {
     axios.get('http://127.0.0.1:5000/api/tickers')
       .then(res => setTickersList(res.data))
-      .catch(err => console.error("Błąd pobierania tickerów:", err));
-      
-    // Automatyczne uruchomienie dla domyślnego tickera
-    handleAnalysis('^GSPC');
+      .catch(err => console.error(err));
   }, []);
 
-  // 2. Funkcja analizy
+  // Analiza po zmianie konfiguracji lub tickera
   const handleAnalysis = async (symbolToAnalyze) => {
     const symbol = symbolToAnalyze || ticker;
     setLoading(true);
     setError('');
     
     try {
+      // NOWOŚĆ: Wysyłamy 'config' do backendu
       const response = await axios.post('http://127.0.0.1:5000/api/analyze', {
-        ticker: symbol
+        ticker: symbol,
+        config: indicatorsConfig // Przekazujemy wagi
       });
       setChartData(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Błąd połączenia z serwerem");
-      console.error(err);
+      setError(err.response?.data?.error || "Błąd serwera");
     } finally {
       setLoading(false);
     }
@@ -45,35 +50,35 @@ function App() {
     <div className="container">
       <div className="header">
         <div className="title">
-          Investor Assistant <span className="highlight">ANFIS</span> React
+          Investor Assistant <span className="highlight">ANFIS</span> Pro
         </div>
       </div>
+
+      {/* Panel Sterowania Wagami */}
+      <InfoBadges 
+        config={indicatorsConfig} 
+        onConfigChange={setIndicatorsConfig} 
+      />
 
       <div className="controls">
         <input 
           type="text" 
           value={ticker} 
           onChange={(e) => setTicker(e.target.value)}
-          placeholder="Wpisz symbol (np. ^NDX)" 
+          placeholder="Symbol..." 
           list="ticker-options"
         />
         <datalist id="ticker-options">
-          {tickersList.map((t) => (
-            <option key={t.symbol} value={t.symbol}>
-              {t.name}
-            </option>
-          ))}
+          {tickersList.map((t) => <option key={t.symbol} value={t.symbol}>{t.name}</option>)}
         </datalist>
 
         <button onClick={() => handleAnalysis()} disabled={loading}>
-          {loading ? 'Przetwarzanie...' : 'Analizuj'}
+          {loading ? 'Przeliczanie...' : 'Analizuj z wagami'}
         </button>
       </div>
 
-      {error && <div style={{color: 'red', textAlign: 'center', marginBottom: 10}}>{error}</div>}
-          
-      <InfoBadges />
-      
+      {error && <div style={{color: 'red', textAlign: 'center'}}>{error}</div>}
+
       <div className="chart-container">
         <MarketChart data={chartData} />
       </div>
