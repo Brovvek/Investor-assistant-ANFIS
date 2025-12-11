@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import MarketChart from './MarketChart';
 import './App.css';
+import InfoBadges from './InfoBadges';
 
 function App() {
   const [ticker, setTicker] = useState('^GSPC');
@@ -70,7 +71,9 @@ function App() {
       </div>
 
       {error && <div style={{color: 'red', textAlign: 'center', marginBottom: 10}}>{error}</div>}
-
+          
+      <InfoBadges />
+      
       <div className="chart-container">
         <MarketChart data={chartData} />
       </div>
