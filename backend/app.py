@@ -4,118 +4,164 @@ from data_engine import DataEngine
 from anfis_engine import AnfisEngine
 from backtest_engine import BacktestEngine
 from optimizer_engine import OptimizerEngine
+from feature_factory import FeatureFactory
 import pandas as pd
+import numpy as np
 import json
 
-# --- IMPORT KONFIGURACJI ---
-# Dzięki temu klucz jest bezpieczny w innym pliku
+# Konfiguracja API Key
 try:
     from config import FRED_API_KEY
 except ImportError:
-    print("BŁĄD: Nie znaleziono pliku config.py lub klucza FRED_API_KEY!")
     FRED_API_KEY = None
 
 app = Flask(__name__)
 CORS(app)
 
-# --- INICJALIZACJA SILNIKÓW ---
+# Inicjalizacja silników
 data_engine = DataEngine(api_key=FRED_API_KEY) 
 anfis_engine = AnfisEngine()
 backtester = BacktestEngine()
 optimizer = OptimizerEngine()
 
-# --- NOWA FUNKCJA NORMALIZACJI (Percentile Rank) ---
-# Naprawia problem "płaskich" wykresów dla M2 i VIX
+# --- FUNKCJE POMOCNICZE ---
+
 def normalize_rank(series, window=504):
-    """
-    Zamienia wartości na percentyle (0-100) w oknie kroczącym (ok. 2 lata).
-    Dzięki temu wskaźniki makro (M2, VIX) stają się dynamiczne dla ANFIS.
-    """
+    """Normalizacja rangowa (0-100)"""
     if series.empty: return series
-    # rank(pct=True) zwraca 0.0-1.0, mnożymy * 100
     return series.rolling(window).rank(pct=True) * 100
 
-# --- ENDPOINTY ---
+def prepare_data_with_features(ticker):
+    """
+    Pobiera dane i przygotowuje je dla ANFIS.
+    NAPRAWA: RSI zostaje surowe, reszta jest normalizowana.
+    """
+    df_raw = data_engine.prepare_dataset(ticker)
+    if df_raw.empty: return pd.DataFrame()
+    
+    # 1. Generowanie wskaźników (Feature Factory)
+    df = FeatureFactory.generate_features(df_raw)
+    
+    # 2. Normalizacja Hybrydowa
+    cols_to_check = [c for c in df.columns if c not in ['Date', 'Price', 'Open', 'High', 'Low', 'Close', 'Adj Close']]
+    
+    window = 504 # 2 lata
+    
+    for col in cols_to_check:
+        # WYJĄTEK DLA RSI:
+        # RSI jest już 0-100. Rangowanie go psuje klasyczne poziomy 30/70.
+        # Sprawdzamy czy nazwa to 'RSI' lub czy to wygenerowana cecha z RSI (np. RSI_DistSMA)
+        if col == 'RSI':
+            # RSI zostawiamy bez zmian (ewentualnie fillna)
+            df[col] = df[col].fillna(50)
+        
+        # Inne wskaźniki (VIX, MACD, Yield, M2) nie mają skali 0-100,
+        # więc musimy je znormalizować rangami.
+        else:
+            df[col] = normalize_rank(df[col], window).fillna(50)
+        
+    df.dropna(inplace=True)
+    return df
+
+# --- ENDPOINTY (Bez zmian logicznych, tylko używają nowej funkcji prepare) ---
 
 @app.route('/api/tickers', methods=['GET'])
-def get_available_tickers():
-    tickers = [
-        {"symbol": "^GSPC", "name": "S&P 500 Index (USA)"},
-        {"symbol": "^NDX", "name": "Nasdaq 100 Index (USA)"},
-        {"symbol": "^DJI", "name": "Dow Jones Industrial Average"},
+def get_tickers():
+    return jsonify([
+        {"symbol": "^GSPC", "name": "S&P 500 (USA)"},
+        {"symbol": "^NDX", "name": "Nasdaq 100 (USA)"},
+        {"symbol": "^DJI", "name": "Dow Jones Ind."},
         {"symbol": "BTC-USD", "name": "Bitcoin / USD"},
-        {"symbol": "GLD", "name": "Złoto (Gold Shares)"},
+        {"symbol": "ETH-USD", "name": "Ethereum / USD"},
+        {"symbol": "GLD", "name": "Złoto (Gold)"},
         {"symbol": "TLT", "name": "Obligacje USA 20Y+"},
+        {"symbol": "NVDA", "name": "NVIDIA Corp."},
         {"symbol": "AAPL", "name": "Apple Inc."},
-        {"symbol": "NVDA", "name": "NVIDIA Corp."}
-    ]
-    return jsonify(tickers)
+        {"symbol": "TSLA", "name": "Tesla Inc."},
+        {"symbol": "MSFT", "name": "Microsoft Corp."}
+    ])
+
+@app.route('/api/auto_strategy', methods=['POST'])
+def auto_strategy():
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    try:
+        df_raw = data_engine.prepare_dataset(ticker)
+        df = FeatureFactory.generate_features(df_raw)
+        df['Target'] = df['Price'].shift(-30) / df['Price'] - 1
+        df.dropna(inplace=True)
+        
+        top_features, top_corrs = FeatureFactory.select_diverse_top_features(
+            df, target_col='Target', top_n=5, max_correlation=0.6
+        )
+        
+        new_config = {}
+        for feat in top_features:
+            corr_val = top_corrs[feat]
+            new_config[feat] = {
+                'enabled': True,
+                'weight': round(abs(corr_val) * 3, 1),
+                'direction': 1 if corr_val > 0 else -1
+            }
+        return jsonify(new_config)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/correlations', methods=['POST'])
+def calculate_correlations():
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    try:
+        df_raw = data_engine.prepare_dataset(ticker)
+        df = FeatureFactory.generate_features(df_raw)
+        df['Target_Return'] = df['Price'].shift(-30) / df['Price'] - 1
+        df.dropna(inplace=True)
+        cols_to_analyze = [c for c in df.columns if c not in ['Target_Return', 'Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Price']]
+        data_matrix = df[cols_to_analyze].join(df['Target_Return'])
+        
+        corr_p = data_matrix.corr(method='pearson')['Target_Return'].drop('Target_Return')
+        corr_s = data_matrix.corr(method='spearman')['Target_Return'].drop('Target_Return')
+        corr_k = data_matrix.corr(method='kendall')['Target_Return'].drop('Target_Return')
+        
+        avg_strength = (corr_p.abs() + corr_s.abs() + corr_k.abs()) / 3
+        top_features = avg_strength.sort_values(ascending=False).head(50).index.tolist()
+        
+        final_data = {}
+        for feature in top_features:
+            final_data[feature] = {
+                'pearson': round(corr_p.get(feature, 0), 4),
+                'spearman': round(corr_s.get(feature, 0), 4),
+                'kendall': round(corr_k.get(feature, 0), 4)
+            }
+        return jsonify(final_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/analyze', methods=['POST'])
 def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
-    
     try:
-        df = data_engine.prepare_dataset(ticker)
+        df = prepare_data_with_features(ticker)
         if df.empty: return jsonify({"error": "Brak danych"}), 400
 
-        # --- NORMALIZACJA RANGOWA (Dynamiczna) ---
-        # Używamy okna 504 dni (2 lata giełdowe) do oceny "czy jest drogo/tanio"
-        window = 504
-        
-        # Obliczamy rangi (0-100) dla wszystkich wskaźników
-        # fillna(50) zabezpiecza początek wykresu przed błędami
-        df['RSI_Rank'] = normalize_rank(df['RSI'], window).fillna(50)
-        df['VIX_Rank'] = normalize_rank(df['VIX'], window).fillna(50)
-        df['Yield_Rank'] = normalize_rank(df['Yield_Curve'], window).fillna(50)
-        
-        # MACD i M2
-        if 'MACD' in df.columns: 
-            df['MACD_Rank'] = normalize_rank(df['MACD'], window).fillna(50)
-        else: 
-            df['MACD_Rank'] = 50
-            
-        if 'M2_Liquidity' in df.columns: 
-            df['M2_Rank'] = normalize_rank(df['M2_Liquidity'], window).fillna(50)
-        else: 
-            df['M2_Rank'] = 50
-
-        # Usuwamy puste wiersze powstałe po rolling window
-        df.dropna(inplace=True)
-
-        # Budowa systemu ANFIS
         anfis_engine.build_system(config)
-        
-        # Obliczenia
         oscillator_values = []
-        df_analysis = df.tail(1260).copy() # Ostatnie 5 lat do wyświetlenia
+        df_analysis = df.tail(1260).copy()
+        active_features = [k for k, v in config.items() if v.get('enabled')]
 
         for index, row in df_analysis.iterrows():
-            inputs = {
-                # Ważne: Przekazujemy znormalizowane rangi!
-                'rsi': row['RSI_Rank'],
-                'vix': row['VIX_Rank'],
-                'yield': row['Yield_Rank'],
-                'macd': row['MACD_Rank'],
-                'm2': row['M2_Rank']
-            }
+            inputs = {feat: row[feat] for feat in active_features if feat in row}
             score = anfis_engine.compute(inputs)
             oscillator_values.append(score)
             
         df_analysis['Sentiment_Oscillator'] = oscillator_values
-        
-        # Formatowanie dla Frontendu
         df_analysis.index.name = 'Date'
         df_analysis.reset_index(inplace=True)
         df_analysis['Date'] = df_analysis['Date'].dt.strftime('%Y-%m-%d')
-        
         return jsonify(df_analysis.to_dict(orient='list'))
-
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/backtest', methods=['POST'])
@@ -123,88 +169,30 @@ def run_backtest():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
-    
-    # Parametry Strategii
     buy_thr = float(req_data.get('buyThreshold', 70))
     sell_thr = float(req_data.get('sellThreshold', 30))
     stop_loss = float(req_data.get('stopLoss', 5)) / 100.0
     take_profit = float(req_data.get('takeProfit', 0)) / 100.0
     trailing_stop = req_data.get('trailingStop', False)
-    
     try:
-        # 1. Oblicz ANFIS (powtórzenie logiki z analyze z nową normalizacją)
-        df = data_engine.prepare_dataset(ticker)
-        
-        window = 504
-        df['RSI_Rank'] = normalize_rank(df['RSI'], window).fillna(50)
-        df['VIX_Rank'] = normalize_rank(df['VIX'], window).fillna(50)
-        df['Yield_Rank'] = normalize_rank(df['Yield_Curve'], window).fillna(50)
-        
-        if 'MACD' in df.columns: df['MACD_Rank'] = normalize_rank(df['MACD'], window).fillna(50)
-        else: df['MACD_Rank'] = 50
-        
-        if 'M2_Liquidity' in df.columns: df['M2_Rank'] = normalize_rank(df['M2_Liquidity'], window).fillna(50)
-        else: df['M2_Rank'] = 50
-        
-        df.dropna(inplace=True)
-        
+        df = prepare_data_with_features(ticker)
         anfis_engine.build_system(config)
-        
         oscillator_values = []
         df_analysis = df.tail(1260).copy()
-        
+        active_features = [k for k, v in config.items() if v.get('enabled')]
         for index, row in df_analysis.iterrows():
-            inputs = {
-                'rsi': row['RSI_Rank'],
-                'vix': row['VIX_Rank'],
-                'yield': row['Yield_Rank'],
-                'macd': row['MACD_Rank'],
-                'm2': row['M2_Rank']
-            }
+            inputs = {feat: row[feat] for feat in active_features if feat in row}
             oscillator_values.append(anfis_engine.compute(inputs))
-            
         df_analysis['Sentiment_Oscillator'] = oscillator_values
         df_analysis.index.name = 'Date'
         df_analysis.reset_index(inplace=True)
         df_analysis['Date'] = df_analysis['Date'].dt.strftime('%Y-%m-%d')
-        
-        # 2. Backtest (z obsługą Stop Loss i Prowizji)
         result = backtester.run(
-            df_analysis, 
-            buy_threshold=buy_thr, 
-            sell_threshold=sell_thr,
-            stop_loss_pct=stop_loss,
-            take_profit_pct=take_profit,
-            use_trailing_stop=trailing_stop,
-            fee_pct=0.001 
+            df_analysis, buy_threshold=buy_thr, sell_threshold=sell_thr,
+            stop_loss_pct=stop_loss, take_profit_pct=take_profit,
+            use_trailing_stop=trailing_stop, fee_pct=0.001
         )
         return jsonify(result)
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/correlations', methods=['POST'])
-def calculate_correlations():
-    req_data = request.json
-    ticker = req_data.get('ticker', '^GSPC')
-    
-    try:
-        df = data_engine.prepare_dataset(ticker)
-        # Przewidywanie zwrotu za 30 dni
-        df['Future_Return'] = df['Price'].shift(-30) / df['Price'] - 1
-        df.dropna(inplace=True)
-        
-        features = ['RSI', 'VIX', 'Yield_Curve', 'M2_Liquidity', 'Inflation_CPI', 'MACD']
-        correlations = {}
-        
-        for feature in features:
-            if feature in df.columns:
-                val = df[feature].corr(df['Future_Return'], method='spearman')
-                correlations[feature] = round(val, 4)
-                
-        return jsonify(correlations)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -212,26 +200,16 @@ def calculate_correlations():
 def optimize():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
-    
-    # STREAMING: Używamy stream_with_context dla paska postępu
     @stream_with_context
     def generate():
         try:
             df = data_engine.prepare_dataset(ticker)
-            
-            # Callback wysyłający postęp do frontendu
             def on_progress(percent):
                 yield json.dumps({"status": "progress", "value": percent}) + "\n"
-
-            # Uruchamiamy AI
             best_weights = optimizer.optimize_weights(df, progress_callback=on_progress)
-            
-            # Wynik końcowy
             yield json.dumps({"status": "done", "result": best_weights}) + "\n"
-            
         except Exception as e:
             yield json.dumps({"status": "error", "message": str(e)}) + "\n"
-
     return Response(generate(), mimetype='application/x-json-stream')
 
 if __name__ == '__main__':

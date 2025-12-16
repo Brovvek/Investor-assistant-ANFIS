@@ -217,3 +217,53 @@ button:disabled {
 .stat-val.red { color: #ff5252; }
 .stat-label { color: #888; font-size: 0.9em; }
 .stat-sub { color: #555; font-size: 0.8em; }
+
+/* --- HEATMAP TABLE --- */
+.heatmap-container {
+  overflow-x: auto;
+  border: 1px solid #363a45;
+  border-radius: 8px;
+  background: #1e222d;
+  max-width: 100%;
+}
+
+.heatmap-table {
+  border-collapse: collapse;
+  width: max-content; /* Rozciąga tabelę poza ekran */
+}
+
+.heatmap-table th, .heatmap-table td {
+  padding: 8px;
+  text-align: center;
+  border: 1px solid #2a2e39;
+  font-size: 0.85em;
+  min-width: 40px;
+}
+
+/* Przyklejona pierwsza kolumna (Metody) */
+.sticky-col {
+  position: sticky;
+  left: 0;
+  background: #2a2e39;
+  z-index: 10;
+  font-weight: bold;
+  border-right: 2px solid #444;
+}
+
+/* Pionowy tekst w nagłówkach */
+.vertical-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  height: 140px; /* Wysokość nagłówka */
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  padding: 5px;
+}
+
+.row-header {
+  text-align: left;
+  padding-left: 15px;
+  min-width: 100px;
+}

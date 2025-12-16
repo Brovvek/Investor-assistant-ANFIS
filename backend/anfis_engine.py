@@ -10,38 +10,39 @@ class AnfisEngine:
 
     def _build_single_expert(self, var_name, logic_type):
         """
-        logic_type: 
-        'pro_trend' (High input = Buy signal) -> MACD, Yield, M2
-        'counter_trend' (Low input = Buy signal) -> RSI
-        'fear' (High input = Buy signal) -> VIX (Panika to okazja)
+        Buduje eksperta używając łagodnych funkcji GAUSSA (Krzywe dzwonowe).
+        Zapewnia to płynniejsze przejścia i mniejszą wrażliwość na szum.
         """
         ant = ctrl.Antecedent(np.arange(0, 101, 1), var_name)
         sent = ctrl.Consequent(np.arange(0, 101, 1), 'sentiment')
 
-        # Gauss (Dzwony)
-        sigma = 20
-        ant['low'] = fuzz.gaussmf(ant.universe, 20, sigma)
-        ant['medium'] = fuzz.gaussmf(ant.universe, 50, sigma)
-        ant['high'] = fuzz.gaussmf(ant.universe, 80, sigma)
+        sigma_in = 10
+        
+        # Funkcje przynależności (Input)
+        ant['low'] = fuzz.gaussmf(ant.universe, 20, sigma_in)
+        ant['medium'] = fuzz.gaussmf(ant.universe, 50, sigma_in)
+        ant['high'] = fuzz.gaussmf(ant.universe, 80, sigma_in)
 
+        # Funkcje przynależności (Output - Sentyment)
         sigma_out = 15
         sent['sell'] = fuzz.gaussmf(sent.universe, 20, sigma_out)
         sent['neutral'] = fuzz.gaussmf(sent.universe, 50, sigma_out)
         sent['buy'] = fuzz.gaussmf(sent.universe, 80, sigma_out)
+        
+        # Metoda defuzzyfikacji (Centroid jest standardem dla Gaussa)
+        sent.defuzzify_method = 'centroid'
 
         rules = []
         if logic_type == 'pro_trend': 
+            # High input = Buy (np. MACD rośnie)
             rules.append(ctrl.Rule(ant['high'], sent['buy']))
             rules.append(ctrl.Rule(ant['medium'], sent['neutral']))
             rules.append(ctrl.Rule(ant['low'], sent['sell']))
-        elif logic_type == 'counter_trend': 
+        else: 
+            # Low input = Buy (np. RSI nisko / Contra)
             rules.append(ctrl.Rule(ant['low'], sent['buy']))
             rules.append(ctrl.Rule(ant['medium'], sent['neutral']))
             rules.append(ctrl.Rule(ant['high'], sent['sell']))
-        elif logic_type == 'fear':
-            rules.append(ctrl.Rule(ant['high'], sent['buy']))
-            rules.append(ctrl.Rule(ant['medium'], sent['neutral']))
-            rules.append(ctrl.Rule(ant['low'], sent['sell']))
 
         system = ctrl.ControlSystem(rules)
         return ctrl.ControlSystemSimulation(system)
@@ -51,28 +52,26 @@ class AnfisEngine:
         self.weights = {}
         self.simulations = {}
 
-        # Mapa logiki dla wskaźników
-        indicators_map = {
-            'rsi': 'counter_trend',
-            'vix': 'fear',
-            'yield': 'pro_trend',
-            'macd': 'pro_trend',
-            'm2': 'pro_trend'
-        }
-
-        for key, logic in indicators_map.items():
-            cfg = user_config.get(key, {'enabled': False, 'weight': 0.0})
+        for feature_name, settings in user_config.items():
+            if not settings.get('enabled', False):
+                continue
             
-            if cfg.get('enabled', False):
-                self.active_inputs.add(key)
-                # Zabezpieczenie przed wagą 0
-                w = float(cfg.get('weight', 0.0))
-                self.weights[key] = w if w > 0 else 0.001 
-                self.simulations[key] = self._build_single_expert(key, logic)
+            weight = float(settings.get('weight', 1.0))
+            if weight <= 0: continue
+
+            # Obsługa dynamicznych kierunków (z Fazy 3)
+            direction = settings.get('direction', 1)
+            logic_type = 'pro_trend' if direction > 0 else 'counter_trend'
+
+            self.active_inputs.add(feature_name)
+            self.weights[feature_name] = weight
+            self.simulations[feature_name] = self._build_single_expert(feature_name, logic_type)
 
     def compute(self, inputs_dict):
         total_score = 0.0
         total_weight = 0.0
+        
+        input_processed = False
 
         for key, sim in self.simulations.items():
             if key in inputs_dict:
@@ -80,10 +79,20 @@ class AnfisEngine:
                 sim.input[key] = val
                 try:
                     sim.compute()
+                    output = sim.output['sentiment']
+                    
                     w = self.weights[key]
-                    total_score += sim.output['sentiment'] * w
+                    total_score += output * w
                     total_weight += w
-                except: pass
+                    input_processed = True
+                except: 
+                    # Fallback
+                    pass
 
-        if total_weight == 0: return 50.0
-        return total_score / total_weight
+        if not input_processed or total_weight == 0: 
+            return 50.0
+        
+        # Czysta średnia ważona (Bez sztucznego rozciągania Sigmoidą)
+        final_result = total_score / total_weight
+        
+        return final_result

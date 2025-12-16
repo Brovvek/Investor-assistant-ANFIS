@@ -1,94 +1,54 @@
-// frontend/src/InfoBadges.jsx
 import React, { useState } from 'react';
-import './App.css'; // Upewnij się, że importujesz CSS
+import axios from 'axios';
+import './App.css';
 
 const InfoBadges = ({ config, onConfigChange, ticker }) => {
-  const [optimizing, setOptimizing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [generating, setGenerating] = useState(false);
 
-  // Dane opisowe dla tooltipów
-  const infoData = {
-    rsi: {
-      fullTitle: 'RSI (Relative Strength Index)',
-      desc: 'Mierzy dynamikę ceny. Wykrywa momenty wyprzedania (dołki) i wykupienia (szczyty).',
-      high: '▲ >70: Drogo (Sygnał Sprzedaży)',
-      low: '▼ <30: Tanio (Sygnał Kupna)'
-    },
-    vix: {
-      fullTitle: 'VIX (Indeks Strachu)',
-      desc: 'Oczekiwana zmienność rynku. Działa odwrotnie do giełdy.',
-      high: '▲ Wysoki: Panika (Często okazja do kupna)',
-      low: '▼ Niski: Chciwość (Ryzyko spadków)'
-    },
-    yield: {
-      fullTitle: 'Yield Curve (10Y-2Y)',
-      desc: 'Różnica oprocentowania obligacji. Najlepszy predyktor recesji.',
-      high: '▲ Dodatnia: Zdrowa gospodarka',
-      low: '▼ Ujemna: Inwersja (Recesja)'
-    },
-    macd: {
-      fullTitle: 'MACD (Trend)',
-      desc: 'Śledzi siłę i kierunek trendu.',
-      high: '▲ Wysoki: Silny trend wzrostowy',
-      low: '▼ Niski: Trend spadkowy'
-    },
-    m2: {
-      fullTitle: 'M2 Money Supply',
-      desc: 'Podaż pieniądza (Płynność). Paliwo dla wzrostów giełdowych.',
-      high: '▲ Rośnie: Banki drukują -> Akcje rosną',
-      low: '▼ Spada: Mniej pieniądza -> Spadki'
-    }
-  };
-
-  const handleOptimize = async () => {
-    setOptimizing(true);
-    setProgress(0);
-
+  // 1. GENERATOR AUTO-ML
+  const handleAutoStrategy = async () => {
+    setGenerating(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/optimize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker })
-      });
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const data = JSON.parse(line);
-            if (data.status === 'progress') setProgress(data.value);
-            else if (data.status === 'done') applyWeights(data.result);
-            else if (data.status === 'error') alert("Błąd AI: " + data.message);
-          } catch (e) { console.error(e); }
-        }
-      }
+      const res = await axios.post('http://127.0.0.1:5000/api/auto_strategy', { ticker });
+      onConfigChange(res.data);
+      alert("Strategia AI wygenerowana!");
     } catch (err) {
-      alert("Błąd połączenia.");
+      alert("Błąd generowania strategii.");
     } finally {
-      setOptimizing(false);
-      setProgress(100);
-      setTimeout(() => setProgress(0), 2000);
+      setGenerating(false);
     }
   };
 
-  const applyWeights = (bestWeights) => {
-    const newConfig = { ...config };
-    Object.keys(bestWeights).forEach(key => {
-      if (!newConfig[key]) newConfig[key] = { enabled: true, weight: 1.0 };
-      newConfig[key].weight = bestWeights[key];
-      newConfig[key].enabled = bestWeights[key] > 0.1;
-    });
-    onConfigChange(newConfig);
+  // 2. STRATEGIA KLASYCZNA (Dostrojona)
+  const handleClassicStrategy = () => {
+    const classicConfig = {
+      'RSI': { 
+          enabled: true, 
+          weight: 1.0, 
+          direction: -1 // RSI 30 (Low) = BUY
+      },
+      'VIX': { 
+          enabled: true, 
+          weight: 1.0, 
+          direction: 1 // VIX High = Panic = BUY
+      },
+      'MACD': { 
+          enabled: true, 
+          weight: 1.5, // Zwiększona waga dla trendu
+          direction: 1 // MACD High = Trend Up = BUY
+      },
+      'Yield_Curve': { 
+          enabled: true, 
+          weight: 1.0, 
+          direction: 1 // Yield Positive = Healthy = BUY
+      },
+      'M2_Liquidity': { 
+          enabled: true, 
+          weight: 1.2, // Płynność jest ważna
+          direction: 1 // M2 Growth = BUY
+      }
+    };
+    onConfigChange(classicConfig);
   };
   
   const handleChange = (key, field, value) => {
@@ -98,48 +58,59 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
     }));
   };
 
-  const badges = [
-    { key: 'rsi', label: 'RSI (Technika)', color: '#cba6f7' },
-    { key: 'vix', label: 'VIX (Strach)', color: '#fab387' },
-    { key: 'yield', label: 'Yield (Makro)', color: '#a6e3a1' },
-    { key: 'macd', label: 'MACD (Trend)', color: '#89b4fa' },
-    { key: 'm2', label: 'M2 (Płynność)', color: '#f9e2af' }
-  ];
+  const features = Object.keys(config);
+
+  const formatLabel = (key) => {
+    if (key.includes('ROC')) return `Momentum (${key})`;
+    if (key.includes('Volat')) return `Zmienność (${key})`;
+    if (key.includes('DistSMA')) return `Trend SMA (${key})`;
+    if (key === 'M2_Liquidity') return 'Płynność M2';
+    if (key === 'Yield_Curve') return 'Yield Curve';
+    return key;
+  };
 
   return (
     <div>
-      {/* NAGŁÓWEK SEKCI KONFIGURACJI */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h4 style={{ margin: 0, fontWeight: 600 }}>
-          Konfiguracja Wag 
-          <span style={{fontSize:'0.8em', fontWeight:'normal', color:'#666', marginLeft: '10px'}}>
-            (Ręcznie lub AI)
-          </span>
+          Aktywne Wskaźniki
         </h4>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          {optimizing && (
-            <div style={{ width: '120px', height: '8px', background: '#333', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ width: `${progress}%`, height: '100%', background: '#2962ff', transition: 'width 0.3s' }}></div>
-            </div>
-          )}
-          
-          <button 
-            onClick={handleOptimize} 
-            disabled={optimizing}
-            className="ai-button"
-            style={{ padding: '8px 16px', borderRadius: '20px', fontSize: '0.85em' }}
-          >
-            {optimizing ? `Trenowanie... ${progress}%` : '✨ Auto-Tune AI'}
-          </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={handleClassicStrategy}
+              className="ai-button"
+              style={{ 
+                padding: '8px 15px', borderRadius: '20px', fontSize: '0.85em',
+                background: '#444', border: '1px solid #555' 
+              }}
+              title="RSI, VIX, MACD, Yield, M2"
+            >
+              🏛️ Klasyczna
+            </button>
+
+            <button 
+              onClick={handleAutoStrategy} 
+              disabled={generating}
+              className="ai-button"
+              style={{ 
+                padding: '8px 15px', borderRadius: '20px', fontSize: '0.85em',
+                background: 'linear-gradient(135deg, #00c853 0%, #64dd17 100%)' 
+              }}
+            >
+              {generating ? 'Szukanie...' : '🚀 Generuj (AI)'}
+            </button>
         </div>
       </div>
 
-      {/* PASEK KAFELKÓW (INDICATORS BAR) */}
       <div className="indicators-bar">
-        {badges.map(({ key, label, color }) => {
-          const itemConfig = config[key] || { enabled: false, weight: 1.0 };
-          const info = infoData[key] || { fullTitle: label };
+        {features.length === 0 && <div style={{color:'#666', fontSize:'0.9em', padding:'10px'}}>Wybierz strategię powyżej.</div>}
+
+        {features.map((key) => {
+          const itemConfig = config[key];
+          const colorHash = key.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          const colors = ['#cba6f7', '#fab387', '#a6e3a1', '#89b4fa', '#f9e2af', '#f38ba8'];
+          const color = colors[colorHash % colors.length];
 
           return (
             <div 
@@ -147,39 +118,31 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
               className={`indicator-badge ${!itemConfig.enabled ? 'disabled' : ''}`}
               style={{ borderLeft: `4px solid ${itemConfig.enabled ? color : '#444'}` }}
             >
-              {/* Checkbox */}
               <input 
                 type="checkbox" 
                 checked={itemConfig.enabled} 
                 onChange={(e) => handleChange(key, 'enabled', e.target.checked)} 
               />
               
-              {/* Nazwa */}
-              <span style={{ color: itemConfig.enabled ? '#fff' : '#888', fontWeight: 600, cursor: 'help' }}>
-                {label}
-              </span>
+              <div style={{display:'flex', flexDirection:'column'}}>
+                <span style={{ color: itemConfig.enabled ? '#fff' : '#888', fontWeight: 600, fontSize: '0.9em' }}>
+                  {formatLabel(key)}
+                </span>
+                <span style={{fontSize: '0.7em', color: '#666'}}>
+                   Kierunek: {itemConfig.direction > 0 ? 'Pro (+)' : 'Contra (-)'}
+                </span>
+              </div>
               
-              {/* Suwak (widoczny tylko gdy włączony) */}
               {itemConfig.enabled && (
                 <div className="slider-container">
                   <input 
-                    type="range" 
-                    min="0.0" max="2.0" step="0.1" 
+                    type="range" min="0.0" max="3.0" step="0.1"
                     value={itemConfig.weight} 
                     onChange={(e) => handleChange(key, 'weight', parseFloat(e.target.value))} 
                   />
                   <span className="weight-label">{itemConfig.weight.toFixed(1)}</span>
                 </div>
               )}
-
-              {/* TOOLTIP (Niewidoczny, pojawia się po najechaniu CSS-em) */}
-              <div className="custom-tooltip">
-                <div className="tooltip-title" style={{ color: color }}>{info.fullTitle}</div>
-                <div className="tooltip-desc">{info.desc}</div>
-                <div className="tooltip-val" style={{ color: '#00e676' }}>{info.high}</div>
-                <div className="tooltip-val" style={{ color: '#ff5252' }}>{info.low}</div>
-              </div>
-
             </div>
           );
         })}
