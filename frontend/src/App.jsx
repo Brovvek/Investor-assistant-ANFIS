@@ -6,6 +6,7 @@ import CorrelationPanel from './CorrelationPanel';
 import BacktestPanel from './BacktestPanel';
 import CollapsibleSection from './CollapsibleSection';
 import './App.css';
+import NeuroPanel from './NeuroPanel'
 
 function App() {
   const [ticker, setTicker] = useState('^GSPC');
@@ -65,7 +66,7 @@ function App() {
         {error && <div style={{color: '#ff5252', textAlign: 'center', marginTop: '15px'}}>{error}</div>}
       </div>
 
-      {/* 2. PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
+      {/* 2. PANEL KORELACJI */}
       <CollapsibleSection title="📊 Mapa Korelacji (Data Science)" defaultOpen={true}>
         <CorrelationPanel ticker={ticker} />
       </CollapsibleSection>
@@ -75,7 +76,12 @@ function App() {
         <div style={{ height: '600px' }}><MarketChart data={chartData} /></div>
       </CollapsibleSection>
 
-      {/* 4. BACKTEST */}
+      {/* 4. PANEL NEURO-FUZZY */}
+      <CollapsibleSection title="🧠 Neuro-Fuzzy Training" defaultOpen={false}>
+        <NeuroPanel ticker={ticker} features={indicatorsConfig} />
+      </CollapsibleSection>
+
+      {/* 5. BACKTEST */}
       <CollapsibleSection title="💰 Symulator Strategii (Backtest)" defaultOpen={false}>
         <BacktestPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>

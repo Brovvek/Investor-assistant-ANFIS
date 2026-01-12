@@ -1,10 +1,11 @@
 import pandas as pd
 import yfinance as yf
-import numpy as np
 import requests
 import sys
+from functools import lru_cache
+import datetime
 
-# Wymuszenie kodowania UTF-8 dla konsoli
+# Wymuszenie kodowania UTF-8 dla konsoli (naprawia błędy przy printowaniu polskich znaków)
 try:
     sys.stdout.reconfigure(encoding='utf-8')
 except:
@@ -16,9 +17,12 @@ class DataEngine:
 
     def _fetch_fred_direct(self, series_id):
         """
-        Pobiera dane bezpośrednio z URL API FRED, omijając bibliotekę fredapi
-        i problemy z polskimi znakami w ścieżkach systemowych.
+        Pobiera dane bezpośrednio z URL API FRED.
         """
+        if not self.api_key:
+            print(f"⚠️ Brak klucza API FRED. Pomijam pobieranie {series_id}.")
+            return pd.Series(dtype=float)
+
         url = f"https://api.stlouisfed.org/fred/series/observations"
         params = {
             'series_id': series_id,
@@ -27,20 +31,16 @@ class DataEngine:
         }
         
         try:
-            response = requests.get(url, params=params)
-            response.raise_for_status() # Zgłoś błąd jeśli status != 200
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
             data = response.json()
             
-            # Parsowanie JSON do DataFrame
             observations = data.get('observations', [])
             if not observations:
                 return pd.Series(dtype=float)
 
             df = pd.DataFrame(observations)
-            
-            # Konwersja danych
             df['date'] = pd.to_datetime(df['date'])
-            # '.' w FRED oznacza brak danych, zamieniamy na NaN
             df['value'] = pd.to_numeric(df['value'], errors='coerce')
             
             df.set_index('date', inplace=True)
@@ -50,102 +50,124 @@ class DataEngine:
             print(f"⚠️ Błąd pobierania {series_id} (Direct): {e}")
             return pd.Series(dtype=float)
 
-    def get_market_data(self, ticker, period="max"):
-        print(f"Pobieranie danych giełdowych dla {ticker}...")
+    # --- CACHING ---
+    # Zapamiętujemy wyniki dla 32 ostatnich zapytań.
+    # Argument 'date_str' służy do inwalidacji cache'u (codziennie nowe dane).
+    
+    @lru_cache(maxsize=32)
+    def _get_market_data_cached(self, ticker, date_str):
+        print(f"⚡ POBIERANIE DANYCH GIEŁDOWYCH: {ticker} ({date_str})")
         try:
-            df = yf.download(ticker, period=period, interval="1d", progress=False)
+            # FIX: auto_adjust=False usuwa FutureWarning z yfinance
+            df = yf.download(ticker, period="5y", interval="1d", progress=False, auto_adjust=False)
         except Exception as e:
             print(f"Błąd yfinance: {e}")
             return pd.DataFrame()
         
         if df.empty: return pd.DataFrame()
 
-        # Obsługa kolumn (MultiIndex fix)
+        # Obsługa MultiIndex (częsty problem w nowym yfinance)
         if isinstance(df.columns, pd.MultiIndex):
-            try: df = df.xs('Close', level=0, axis=1)
+            try: 
+                # Próbujemy wyciągnąć 'Close' lub 'Adj Close'
+                if 'Adj Close' in df.columns.get_level_values(0):
+                    df = df.xs('Adj Close', level=0, axis=1)
+                elif 'Close' in df.columns.get_level_values(0):
+                    df = df.xs('Close', level=0, axis=1)
+                else:
+                    # Fallback: bierzemy pierwszą kolumnę numeryczną
+                    df = df.iloc[:, 0].to_frame()
             except: 
-                if 'Close' in df.columns: df = df[['Close']]
-                else: df = df.iloc[:, 0].to_frame()
+                df = df.iloc[:, 0].to_frame()
         
-        if isinstance(df, pd.Series): df = df.to_frame(name='Price')
+        # Upewniamy się, że mamy kolumnę 'Price'
+        if isinstance(df, pd.Series): 
+            df = df.to_frame(name='Price')
         else:
-            df = df.rename(columns={df.columns[0]: 'Price'})
-            df = df[['Price']]
-
-        # --- WSKAŹNIKI TECHNICZNE ---
-        try:
-            # 1. RSI
-            delta = df['Price'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            df['RSI'] = 100 - (100 / (1 + rs))
-
-            # 2. MACD HISTOGRAM (Zmiana!)
-            # MACD Line
-            exp12 = df['Price'].ewm(span=12, adjust=False).mean()
-            exp26 = df['Price'].ewm(span=26, adjust=False).mean()
-            macd_line = exp12 - exp26
-            # Signal Line
-            signal_line = macd_line.ewm(span=9, adjust=False).mean()
-            # Histogram (To nas interesuje - jest dynamiczne)
-            df['MACD'] = macd_line - signal_line 
-
-        except Exception as e:
-            print(f"Błąd wskaźników: {e}")
-
+            # Jeśli df ma jedną kolumnę, nazywamy ją Price
+            if len(df.columns) == 1:
+                df.columns = ['Price']
+            elif 'Close' in df.columns:
+                df = df[['Close']].rename(columns={'Close': 'Price'})
+            elif 'Adj Close' in df.columns:
+                df = df[['Adj Close']].rename(columns={'Adj Close': 'Price'})
+            else:
+                df = df.rename(columns={df.columns[0]: 'Price'})
+                df = df[['Price']]
+            
         return df
-    def get_macro_data(self):
-        print("Pobieranie danych makro (Direct API)...")
+
+    @lru_cache(maxsize=1) # Cache dla Makro (wspólny dla wszystkich tickerów)
+    def _get_macro_data_cached(self, date_str):
+        print(f"⚡ POBIERANIE DANYCH MAKRO ({date_str})")
         
-        # Używamy nowej metody _fetch_fred_direct zamiast biblioteki fredapi
-        
-        # 1. Yield Curve (T10Y2Y)
+        # Pobieranie surowych serii
         yield_curve = self._fetch_fred_direct('T10Y2Y')
-        
-        # 2. VIX (VIXCLS)
         vix = self._fetch_fred_direct('VIXCLS')
-        
-        # 3. M2 Money Supply (M2SL) -> YoY
         m2 = self._fetch_fred_direct('M2SL')
-        # M2 jest miesięczne, ale yfinance dzienne. fillna załatwi sprawę później.
-        m2_yoy = m2.pct_change(periods=12) * 100 
-
-        # 4. Inflacja CPI (CPIAUCSL) -> YoY
         cpi = self._fetch_fred_direct('CPIAUCSL')
-        cpi_yoy = cpi.pct_change(periods=12) * 100
+        
+        # Obliczenia dynamiki (YoY)
+        # FIX: fill_method=None usuwa FutureWarning z pandas
+        m2_yoy = m2.pct_change(periods=12, fill_method=None) * 100 
+        cpi_yoy = cpi.pct_change(periods=12, fill_method=None) * 100
 
-        # Tworzenie DataFrame
         macro_df = pd.DataFrame({
             'Yield_Curve': yield_curve,
             'VIX': vix,
             'M2_Liquidity': m2_yoy,
             'Inflation_CPI': cpi_yoy
         })
-        
         return macro_df
 
     def prepare_dataset(self, ticker):
-        market_df = self.get_market_data(ticker)
+        """
+        Główna funkcja budująca dataset.
+        Łączy dane rynkowe i makro, oraz liczy podstawowe wskaźniki (RSI, MACD)
+        wymagane do wizualizacji na wykresie.
+        """
+        # Data jako klucz cache
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
         
+        # 1. Pobierz dane giełdowe
+        market_df = self._get_market_data_cached(ticker, today_str).copy()
         if market_df.empty:
             return pd.DataFrame()
 
-        macro_df = self.get_macro_data()
+        # 2. Pobierz dane makro
+        macro_df = self._get_macro_data_cached(today_str).copy()
         
-        # Łączenie (Left Join do cen akcji)
+        # 3. Łączenie (Left Join do dat giełdowych)
         df = market_df.join(macro_df, how='left')
         
-        # Wypełnianie danych makro (ffill) - rozciągamy dane miesięczne na dzienne
+        # 4. Wypełnianie braków (Forward Fill)
+        # Makroekonomia wychodzi rzadko (miesięcznie), więc powielamy ostatnią wartość
         df.ffill(inplace=True)
         
-        # Zabezpieczenie: Jeśli API nie zadziałało, wstawiamy zera, żeby aplikacja nie padła
-        expected_cols = ['Yield_Curve', 'VIX', 'M2_Liquidity', 'Inflation_CPI']
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = 0.0 
-        
-        # Usuwamy puste wiersze na początku historii
-        df.dropna(inplace=True)
-        
+        # Jeśli na początku brakuje danych makro, wypełniamy zerami, żeby nie tracić wierszy
+        for col in ['Yield_Curve', 'VIX', 'M2_Liquidity', 'Inflation_CPI']:
+            if col not in df.columns: df[col] = 0.0
+        df.fillna(0, inplace=True)
+            
+        # 5. Obliczanie podstawowych wskaźników technicznych
+        # (Są potrzebne do wykresu, nawet jeśli FeatureFactory robi swoje)
+        try:
+            # RSI
+            delta = df['Price'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss.replace(0, 0.001) # Unikamy dzielenia przez 0
+            df['RSI'] = 100 - (100 / (1 + rs))
+
+            # MACD
+            exp12 = df['Price'].ewm(span=12, adjust=False).mean()
+            exp26 = df['Price'].ewm(span=26, adjust=False).mean()
+            macd_line = exp12 - exp26
+            signal_line = macd_line.ewm(span=9, adjust=False).mean()
+            # Histogram
+            df['MACD'] = macd_line - signal_line
+        except Exception as e:
+            print(f"Błąd obliczania wskaźników bazowych: {e}")
+            pass
+            
         return df

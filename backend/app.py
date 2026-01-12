@@ -5,9 +5,17 @@ from anfis_engine import AnfisEngine
 from backtest_engine import BacktestEngine
 from optimizer_engine import OptimizerEngine
 from feature_factory import FeatureFactory
+from neuro_engine import NeuroEngine
 import pandas as pd
 import numpy as np
 import json
+import sys
+
+# Wymuszenie UTF-8 w konsoli (Windows fix)
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except:
+    pass
 
 try:
     from config import FRED_API_KEY
@@ -17,53 +25,38 @@ except ImportError:
 app = Flask(__name__)
 CORS(app)
 
+# Inicjalizacja silników
 data_engine = DataEngine(api_key=FRED_API_KEY) 
 anfis_engine = AnfisEngine()
 backtester = BacktestEngine()
 optimizer = OptimizerEngine()
+neuro_engine = NeuroEngine()
 
 # --- FUNKCJE POMOCNICZE ---
 
 def normalize_rank(series, window=252):
-    """
-    ZMIANA: Skrócono okno do 252 dni (1 rok).
-    Mniejsze ryzyko ucięcia danych na starcie.
-    """
     if series.empty: return series
-    # Min_periods=1 sprawia, że liczy rangę nawet jak ma mało danych na początku
     return series.rolling(window, min_periods=1).rank(pct=True) * 100
 
 def prepare_data_with_features(ticker):
-    """
-    Przygotowanie danych odporne na błędy (Robust Data Prep)
-    """
-    # 1. Pobranie danych (z cache)
     df_raw = data_engine.prepare_dataset(ticker)
     if df_raw.empty: return pd.DataFrame()
     
-    # 2. Generowanie cech
     df = FeatureFactory.generate_features(df_raw)
     
-    # 3. Normalizacja Hybrydowa
+    # Normalizacja
     cols_to_check = [c for c in df.columns if c not in ['Date', 'Price', 'Open', 'High', 'Low', 'Close', 'Adj Close']]
-    
-    # Zmieniono okno na 252 (1 rok) dla większej dostępności danych
     window = 252 
-    
     for col in cols_to_check:
         if col == 'RSI' or 'RSI_' in col and 'Rank' not in col:
-            # RSI zostawiamy surowe, ale wypełniamy dziury 50-tką
             df[col] = df[col].fillna(50)
         else:
-            # Reszta (VIX, Makro) -> Rangi
             df[col] = normalize_rank(df[col], window).fillna(50)
     
-    # --- KLUCZOWA ZMIANA ---
-    # Zamiast dropna() (które kasuje 2 lata danych), używamy bfill/ffill
-    # Dzięki temu backtest zadziała nawet na początku historii
-    df.fillna(method='bfill', inplace=True) # Wypełnij wstecz
-    df.fillna(method='ffill', inplace=True) # Wypełnij w przód
-    df.fillna(50, inplace=True) # Ostateczność: środek skali
+    # Wypełnianie braków (Robust)
+    df.bfill(inplace=True)
+    df.ffill(inplace=True)
+    df.fillna(50, inplace=True)
     
     return df
 
@@ -86,10 +79,6 @@ def get_tickers():
         {"symbol": "EURUSD=X", "name": "EUR/USD"}
     ])
 
-# ... (Pozostałe endpointy: auto_strategy, correlations - BEZ ZMIAN) ...
-# Wklej tutaj resztę endpointów z poprzedniej wersji (są poprawne).
-# Jedyna ważna zmiana była wyżej w funkcji `prepare_data_with_features`
-
 @app.route('/api/auto_strategy', methods=['POST'])
 def auto_strategy():
     req_data = request.json
@@ -98,9 +87,7 @@ def auto_strategy():
         df_raw = data_engine.prepare_dataset(ticker)
         df = FeatureFactory.generate_features(df_raw)
         df['Target'] = df['Price'].shift(-30) / df['Price'] - 1
-        
-        # Tu też używamy bezpieczniejszego wypełniania
-        df.fillna(method='ffill', inplace=True)
+        df.ffill(inplace=True)
         df.dropna(inplace=True)
         
         top_features, top_corrs = FeatureFactory.select_diverse_top_features(
@@ -128,7 +115,6 @@ def calculate_correlations():
         df = FeatureFactory.generate_features(df_raw)
         df['Target_Return'] = df['Price'].shift(-30) / df['Price'] - 1
         df.dropna(inplace=True) 
-        
         cols_to_analyze = [c for c in df.columns if c not in ['Target_Return', 'Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Price']]
         data_matrix = df[cols_to_analyze].join(df['Target_Return'])
         
@@ -160,7 +146,6 @@ def analyze():
         if df.empty: return jsonify({"error": "Brak danych"}), 400
 
         anfis_engine.build_system(config)
-        
         oscillator_values = []
         df_analysis = df.tail(1260).copy()
         active_features = [k for k, v in config.items() if v.get('enabled')]
@@ -183,8 +168,6 @@ def run_backtest():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
-    
-    # Parametry
     buy_thr = float(req_data.get('buyThreshold', 70))
     sell_thr = float(req_data.get('sellThreshold', 30))
     stop_loss = float(req_data.get('stopLoss', 5)) / 100.0
@@ -194,25 +177,15 @@ def run_backtest():
     try:
         df = prepare_data_with_features(ticker)
         anfis_engine.build_system(config)
-        
         oscillator_values = []
         df_analysis = df.tail(1260).copy()
         active_features = [k for k, v in config.items() if v.get('enabled')]
-        
-        # DEBUG: Sprawdzamy czy w ogóle mamy dane
-        print(f"Backtest: Analiza {len(df_analysis)} wierszy dla {ticker}")
         
         for index, row in df_analysis.iterrows():
             inputs = {feat: row[feat] for feat in active_features if feat in row}
             oscillator_values.append(anfis_engine.compute(inputs))
             
         df_analysis['Sentiment_Oscillator'] = oscillator_values
-        
-        # DEBUG: Sprawdzamy czy oscylator działa (czy nie jest stale 50)
-        max_score = max(oscillator_values) if oscillator_values else 0
-        min_score = min(oscillator_values) if oscillator_values else 0
-        print(f"DEBUG ANFIS: Min={min_score:.2f}, Max={max_score:.2f}")
-
         df_analysis.index.name = 'Date'
         df_analysis.reset_index(inplace=True)
         df_analysis['Date'] = df_analysis['Date'].dt.strftime('%Y-%m-%d')
@@ -223,11 +196,56 @@ def run_backtest():
             use_trailing_stop=trailing_stop, fee_pct=0.001
         )
         return jsonify(result)
-        
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+# --- NOWY ENDPOINT STRUMIENIOWY ---
+@app.route('/api/train_neuro', methods=['POST'])
+def train_neuro():
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    features = req_data.get('features', []) 
+    epochs = int(req_data.get('epochs', 200))
+    
+    # Używamy stream_with_context dla długotrwałego połączenia
+    @stream_with_context
+    def generate_stream():
+        if not features:
+            yield json.dumps({"error": "Nie wybrano cech"}) + "\n"
+            return
+    
+        try:
+            df = prepare_data_with_features(ticker)
+            
+            # Target: Cena za 5 dni
+            shift_days = -5
+            df['Future_Return'] = df['Price'].shift(shift_days) / df['Price'] - 1
+            df['Target_Scaled'] = df['Future_Return'] * 100 
+            
+            # Podział danych
+            df_train = df.dropna(subset=['Target_Scaled']).copy()
+            df_future = df[df['Target_Scaled'].isna()].copy()
+            
+            if df_future.empty:
+                df_future = df.tail(shift_days * -1).copy()
+
+            # Wywołanie generatora
+            yield from neuro_engine.train_model(
+                df_train,
+                df_future,
+                features=features, 
+                target_col='Target_Scaled', 
+                epochs=epochs,
+                lr=0.01
+            )
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield json.dumps({"error": str(e)}) + "\n"
+
+    # Zwracamy odpowiedź strumieniową
+    return Response(generate_stream(), mimetype='application/x-json-stream')
 
 @app.route('/api/optimize', methods=['POST'])
 def optimize():

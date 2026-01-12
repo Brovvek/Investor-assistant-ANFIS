@@ -57,7 +57,9 @@ const CorrelationPanel = ({ ticker }) => {
 
   // Tekst do wyświetlenia w komórkach (Formatowanie %)
   const textValues = zValues.map(row => 
-    row.map(val => `${(val * 100).toFixed(0)}%`)
+    // Formatowanie wartości do 2 miejsc po przecinku
+    row.map(val => (val >= 0 ? '+' : '') + val.toFixed(2))
+    // row.map(val => `${(val * 100).toFixed(0)}%`)
   );
 
   return (
