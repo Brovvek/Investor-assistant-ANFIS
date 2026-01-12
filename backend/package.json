@@ -1,0 +1,17 @@
+{
+  "name": "investor-assistant-anfis",
+  "version": "3.0.0",
+  "description": "Investor Assistant with ANFIS Engine",
+  "main": "app.py",
+  "scripts": {
+    "start": "venv\\Scripts\\activate && python app.py",
+    "install-deps": "venv\\Scripts\\activate && pip install -r requirements.txt"
+  },
+  "keywords": [
+    "anfis",
+    "investor",
+    "flask"
+  ],
+  "author": "",
+  "license": "ISC"
+}
