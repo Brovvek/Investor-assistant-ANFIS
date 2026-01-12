@@ -55,10 +55,10 @@ const CorrelationPanel = ({ ticker }) => {
     xValues.map(feat => corrData[feat]['kendall'])
   ];
 
-  // Tekst do wyświetlenia w komórkach (Formatowanie %)
   const textValues = zValues.map(row => 
     // Formatowanie wartości do 2 miejsc po przecinku
     row.map(val => (val >= 0 ? '+' : '') + val.toFixed(2))
+    // Tekst do wyświetlenia w komórkach (Formatowanie %)
     // row.map(val => `${(val * 100).toFixed(0)}%`)
   );
 
