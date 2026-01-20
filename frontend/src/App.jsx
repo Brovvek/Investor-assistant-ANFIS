@@ -6,6 +6,7 @@ import CorrelationPanel from './CorrelationPanel';
 import BacktestPanel from './BacktestPanel';
 import CollapsibleSection from './CollapsibleSection';
 import './App.css';
+import AnfisEducationalPanel from './AnfisEducationalPanel';
 
 function App() {
   const [ticker, setTicker] = useState('^GSPC');
@@ -13,9 +14,9 @@ function App() {
   const [tickersList, setTickersList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   // Domyślnie pusta konfiguracja - wymuszamy wybór strategii
-  const [indicatorsConfig, setIndicatorsConfig] = useState({}); 
+  const [indicatorsConfig, setIndicatorsConfig] = useState({});
 
   useEffect(() => {
     axios.get('http://127.0.0.1:5000/api/tickers').then(res => setTickersList(res.data));
@@ -40,29 +41,29 @@ function App() {
 
       {/* 1. GŁÓWNY PANEL STEROWANIA */}
       <div className="main-controls-box">
-        <InfoBadges 
-          config={indicatorsConfig} 
+        <InfoBadges
+          config={indicatorsConfig}
           onConfigChange={setIndicatorsConfig}
-          ticker={ticker} 
+          ticker={ticker}
         />
-        
+
         <div className="controls-row">
-          <input 
-            type="text" 
-            value={ticker} 
+          <input
+            type="text"
+            value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            placeholder="Symbol (np. ^NDX)" 
+            placeholder="Symbol (np. ^NDX)"
             list="ticker-options"
           />
           <datalist id="ticker-options">
             {tickersList.map((t) => <option key={t.symbol} value={t.symbol}>{t.name}</option>)}
           </datalist>
-          
+
           <button onClick={() => handleAnalysis()} disabled={loading}>
             {loading ? 'Przeliczanie...' : 'Analizuj Rynek'}
           </button>
         </div>
-        {error && <div style={{color: '#ff5252', textAlign: 'center', marginTop: '15px'}}>{error}</div>}
+        {error && <div style={{ color: '#ff5252', textAlign: 'center', marginTop: '15px' }}>{error}</div>}
       </div>
 
       {/* 2. PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
@@ -79,7 +80,11 @@ function App() {
       <CollapsibleSection title="💰 Symulator Strategii (Backtest)" defaultOpen={false}>
         <BacktestPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>
+      <CollapsibleSection title="🎓 ANFIS - Proces Uczenia" defaultOpen={true}>
+        <AnfisEducationalPanel config={indicatorsConfig} ticker={ticker} />
+      </CollapsibleSection>
     </div>
+
   );
 }
 
