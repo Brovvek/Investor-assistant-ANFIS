@@ -7,6 +7,7 @@ import BacktestPanel from './BacktestPanel';
 import CollapsibleSection from './CollapsibleSection';
 import './App.css';
 import AnfisEducationalPanel from './AnfisEducationalPanel';
+import TrainingPanel from './TrainingPanel';
 
 function App() {
   const [ticker, setTicker] = useState('^GSPC');
@@ -80,8 +81,13 @@ function App() {
       <CollapsibleSection title="💰 Symulator Strategii (Backtest)" defaultOpen={false}>
         <BacktestPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>
+      
       <CollapsibleSection title="🎓 ANFIS - Proces Uczenia" defaultOpen={true}>
         <AnfisEducationalPanel config={indicatorsConfig} ticker={ticker} />
+      </CollapsibleSection>
+      
+      <CollapsibleSection title="🧠 Trening ANFIS (Backpropagation)" defaultOpen={false}>
+        <TrainingPanel config={indicatorsConfig} ticker={ticker} />
       </CollapsibleSection>
     </div>
 

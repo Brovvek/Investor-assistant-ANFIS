@@ -155,11 +155,18 @@ def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
+    
     try:
         df = prepare_data_with_features(ticker)
-        if df.empty: return jsonify({"error": "Brak danych"}), 400
+        if df.empty: 
+            return jsonify({"error": "Brak danych"}), 400
 
-        anfis_engine.build_system(config)
+        # ========== ZMIANA: Sprawdź czy ANFIS jest wytrenowany ==========
+        if not hasattr(anfis_engine, 'trained') or not anfis_engine.trained:
+            # Jeśli nie, użyj starego systemu (bez uczenia)
+            anfis_engine.build_system(config)
+        # Jeśli jest wytrenowany, używa nauczonych parametrów automatycznie
+        # ================================================================
         
         oscillator_values = []
         df_analysis = df.tail(1260).copy()
@@ -167,14 +174,16 @@ def analyze():
 
         for index, row in df_analysis.iterrows():
             inputs = {feat: row[feat] for feat in active_features if feat in row}
-            score = anfis_engine.compute(inputs)
+            score = anfis_engine.compute(inputs)  # Używa forward() jeśli wytrenowany
             oscillator_values.append(score)
             
         df_analysis['Sentiment_Oscillator'] = oscillator_values
         df_analysis.index.name = 'Date'
         df_analysis.reset_index(inplace=True)
         df_analysis['Date'] = df_analysis['Date'].dt.strftime('%Y-%m-%d')
+        
         return jsonify(df_analysis.to_dict(orient='list'))
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -244,6 +253,82 @@ def optimize():
         except Exception as e:
             yield json.dumps({"status": "error", "message": str(e)}) + "\n"
     return Response(generate(), mimetype='application/x-json-stream')
+
+@app.route('/api/train_anfis', methods=['POST'])
+def train_anfis():
+    """
+    Nowy endpoint: Trenuje ANFIS z backpropagation
+    """
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    config = req_data.get('config', {})
+    epochs = int(req_data.get('epochs', 50))
+    
+    @stream_with_context
+    def generate():
+        try:
+            # Przygotuj dane
+            df = prepare_data_with_features(ticker)
+            if df.empty:
+                yield json.dumps({"status": "error", "message": "Brak danych"}) + "\n"
+                return
+            
+            # Callback dla progressu
+            def on_progress(percent):
+                yield json.dumps({"status": "progress", "value": percent}) + "\n"
+            
+            # Trenuj ANFIS
+            from optimizer_engine import OptimizerEngine
+            optimizer = OptimizerEngine()
+            
+            results = optimizer.train_anfis(
+                df, 
+                config, 
+                epochs=epochs, 
+                progress_callback=on_progress
+            )
+            
+            # Zaktualizuj globalny anfis_engine
+            global anfis_engine
+            anfis_engine = optimizer.anfis
+            
+            # Wyślij wyniki
+            yield json.dumps({
+                "status": "done", 
+                "result": {
+                    "train_mse": results['train_mse'],
+                    "test_mse": results['test_mse'],
+                    "overfitting_ratio": results['overfitting_ratio'],
+                    "params": results['params'],
+                    "history": {
+                        'epochs': results['history']['epochs'],
+                        'mse': results['history']['mse']
+                    }
+                }
+            }) + "\n"
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield json.dumps({"status": "error", "message": str(e)}) + "\n"
+    
+    return Response(generate(), mimetype='application/x-json-stream')
+
+
+@app.route('/api/get_anfis_params', methods=['GET'])
+def get_anfis_params():
+    """
+    Zwraca nauczone parametry ANFIS (centra, sigmy, konsekwenty)
+    """
+    try:
+        if not hasattr(anfis_engine, 'trained') or not anfis_engine.trained:
+            return jsonify({"error": "ANFIS nie został wytrenowany"}), 400
+        
+        params = anfis_engine.get_params_summary()
+        return jsonify(params)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
