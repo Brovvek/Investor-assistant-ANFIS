@@ -9,10 +9,6 @@ class AnfisEngine:
         self.active_inputs = set()
 
     def _build_single_expert(self, var_name, logic_type):
-        """
-        Buduje eksperta używając łagodnych funkcji GAUSSA (Krzywe dzwonowe).
-        Zapewnia to płynniejsze przejścia i mniejszą wrażliwość na szum.
-        """
         ant = ctrl.Antecedent(np.arange(0, 101, 1), var_name)
         sent = ctrl.Consequent(np.arange(0, 101, 1), 'sentiment')
 
@@ -92,7 +88,6 @@ class AnfisEngine:
         if not input_processed or total_weight == 0: 
             return 50.0
         
-        # Czysta średnia ważona (Bez sztucznego rozciągania Sigmoidą)
         final_result = total_score / total_weight
         
         return final_result

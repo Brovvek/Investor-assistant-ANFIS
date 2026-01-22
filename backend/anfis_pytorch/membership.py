@@ -20,10 +20,6 @@ class GaussMembFunc(nn.Module):
         return torch.exp(-torch.pow(x - self.mu, 2) / (2 * self.sigma**2))
 
 def make_anfis(x, num_mfs=3, num_out=1):
-    """
-    Automatycznie tworzy model ANFIS na podstawie danych wejściowych.
-    Oblicza zakresy danych i rozmieszcza funkcje Gaussa równomiernie.
-    """
     num_invars = x.shape[1]
     minvals, _ = torch.min(x, dim=0)
     maxvals, _ = torch.max(x, dim=0)

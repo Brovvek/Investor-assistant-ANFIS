@@ -12,9 +12,6 @@ class NeuroEngine:
         self.trained_features = []
         
     def train_model(self, df_train, df_future, features, target_col='Target', epochs=100, lr=0.01):
-        """
-        Generator (yield) zwracający postęp treningu oraz bogate dane wynikowe (Cena, Data).
-        """
         # 1. WALIDACJA CECH
         valid_features = [f for f in features if f in df_train.columns]
         if not valid_features:
@@ -28,7 +25,7 @@ class NeuroEngine:
         y_train = torch.tensor(df_train[target_col].values, dtype=torch.float)
         X_future = torch.tensor(df_future[valid_features].values, dtype=torch.float)
 
-        # --- NOWOŚĆ: Wyciągamy Metadane (Daty i Ceny) ---
+        # Wyciągamy Metadane (Daty i Ceny) ---
         # Zakładamy, że Index to Data (DatetimeIndex)
         try:
             train_dates = df_train.index.strftime('%Y-%m-%d').tolist()

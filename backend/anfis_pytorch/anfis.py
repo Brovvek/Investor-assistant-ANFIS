@@ -113,7 +113,6 @@ class AnfisNet(nn.Module):
         
         # 5. Defuzzify (Średnia ważona)
         # Mnożenie macierzy: (Batch, 1, Rules) * (Batch, Rules, 1) -> (Batch, 1, 1)
-        # To naprawia błąd "batch1 must be a 3D tensor"
         y_pred = torch.bmm(w_norm.unsqueeze(1), y_tsk)
         
         return y_pred.squeeze(1).squeeze(1)
