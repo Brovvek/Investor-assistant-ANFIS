@@ -1,6 +1,6 @@
 {
   "name": "investor-assistant-anfis",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Investor Assistant with ANFIS Engine",
   "main": "app.py",
   "scripts": {
