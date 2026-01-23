@@ -10,20 +10,20 @@ class AnfisEngine:
 
     def _build_single_expert(self, var_name, logic_type):
         """
-        Buduje eksperta używając łagodnych funkcji GAUSSA (Krzywe dzwonowe).
-        Zapewnia to płynniejsze przejścia i mniejszą wrażliwość na szum.
+        Buduje eksperta uÅ¼ywajÄ…c Å‚agodnych funkcji GAUSSA (Krzywe dzwonowe).
+        Zapewnia to pÅ‚ynniejsze przejÅ›cia i mniejszÄ… wraÅ¼liwoÅ›Ä‡ na szum.
         """
         ant = ctrl.Antecedent(np.arange(0, 101, 1), var_name)
         sent = ctrl.Consequent(np.arange(0, 101, 1), 'sentiment')
 
         sigma_in = 10
         
-        # Funkcje przynależności (Input)
+        # Funkcje przynaleÅ¼noÅ›ci (Input)
         ant['low'] = fuzz.gaussmf(ant.universe, 20, sigma_in)
         ant['medium'] = fuzz.gaussmf(ant.universe, 50, sigma_in)
         ant['high'] = fuzz.gaussmf(ant.universe, 80, sigma_in)
 
-        # Funkcje przynależności (Output - Sentyment)
+        # Funkcje przynaleÅ¼noÅ›ci (Output - Sentyment)
         sigma_out = 15
         sent['sell'] = fuzz.gaussmf(sent.universe, 20, sigma_out)
         sent['neutral'] = fuzz.gaussmf(sent.universe, 50, sigma_out)
@@ -34,7 +34,7 @@ class AnfisEngine:
 
         rules = []
         if logic_type == 'pro_trend': 
-            # High input = Buy (np. MACD rośnie)
+            # High input = Buy (np. MACD roÅ›nie)
             rules.append(ctrl.Rule(ant['high'], sent['buy']))
             rules.append(ctrl.Rule(ant['medium'], sent['neutral']))
             rules.append(ctrl.Rule(ant['low'], sent['sell']))
@@ -59,7 +59,7 @@ class AnfisEngine:
             weight = float(settings.get('weight', 1.0))
             if weight <= 0: continue
 
-            # Obsługa dynamicznych kierunków (z Fazy 3)
+            # ObsÅ‚uga dynamicznych kierunkÃ³w (z Fazy 3)
             direction = settings.get('direction', 1)
             logic_type = 'pro_trend' if direction > 0 else 'counter_trend'
 
@@ -92,7 +92,7 @@ class AnfisEngine:
         if not input_processed or total_weight == 0: 
             return 50.0
         
-        # Czysta średnia ważona (Bez sztucznego rozciągania Sigmoidą)
+        # Czysta Å›rednia waÅ¼ona (Bez sztucznego rozciÄ…gania SigmoidÄ…)
         final_result = total_score / total_weight
         
         return final_result

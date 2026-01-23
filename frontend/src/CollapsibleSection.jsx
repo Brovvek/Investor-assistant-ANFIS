@@ -7,7 +7,7 @@ const CollapsibleSection = ({ title, children, defaultOpen = true }) => {
     <div style={styles.card}>
       <div style={styles.header} onClick={() => setIsOpen(!isOpen)}>
         <span style={styles.title}>{title}</span>
-        <span style={styles.icon}>{isOpen ? '▼' : '▶'}</span>
+        <span style={styles.icon}>{isOpen ? 'â–¼' : 'â–¶'}</span>
       </div>
       {isOpen && <div style={styles.content}>{children}</div>}
     </div>

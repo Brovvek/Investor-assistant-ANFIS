@@ -5,6 +5,7 @@ import InfoBadges from './InfoBadges';
 import CorrelationPanel from './CorrelationPanel';
 import BacktestPanel from './BacktestPanel';
 import CollapsibleSection from './CollapsibleSection';
+import AnfisMLPanel from './AnfisMLPanel';
 import './App.css';
 
 function App() {
@@ -36,6 +37,9 @@ function App() {
         <div className="title">
           Investor Assistant <span className="highlight">ANFIS</span> Pro
         </div>
+        <div style={{ fontSize: '0.8em', color: '#666' }}>
+          🧠 PyTorch ML Engine v2.0
+        </div>
       </div>
 
       {/* 1. GŁÓWNY PANEL STEROWANIA */}
@@ -65,7 +69,7 @@ function App() {
         {error && <div style={{color: '#ff5252', textAlign: 'center', marginTop: '15px'}}>{error}</div>}
       </div>
 
-      {/* 2. PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
+      {/* 2. PANEL KORELACJI */}
       <CollapsibleSection title="📊 Mapa Korelacji (Data Science)" defaultOpen={true}>
         <CorrelationPanel ticker={ticker} />
       </CollapsibleSection>
@@ -75,7 +79,12 @@ function App() {
         <div style={{ height: '600px' }}><MarketChart data={chartData} /></div>
       </CollapsibleSection>
 
-      {/* 4. BACKTEST */}
+      {/* 4. NOWY! PANEL UCZENIA ANFIS ML */}
+      <CollapsibleSection title="🧠 Uczenie ANFIS (Deep Learning Prediction)" defaultOpen={true}>
+        <AnfisMLPanel ticker={ticker} config={indicatorsConfig} />
+      </CollapsibleSection>
+
+      {/* 5. BACKTEST */}
       <CollapsibleSection title="💰 Symulator Strategii (Backtest)" defaultOpen={false}>
         <BacktestPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>

@@ -28,7 +28,7 @@ const BacktestPanel = ({ ticker, config }) => {
       setResults(response.data);
     } catch (err) { 
         console.error(err);
-        alert("Błąd symulacji. Sprawdź czy pobrano dane w sekcji Analizy."); 
+        alert("BÅ‚Ä…d symulacji. SprawdÅº czy pobrano dane w sekcji Analizy."); 
     } finally { 
         setLoading(false); 
     }
@@ -39,23 +39,23 @@ const BacktestPanel = ({ ticker, config }) => {
   
   if (results && results.equity_curve && results.chart_dates) {
       
-      // 1. Mapa pomocnicza: Data -> Wartość Portfela (Equity)
-      // Dzięki temu wiemy, na jakiej wysokości narysować trójkąt w danym dniu
+      // 1. Mapa pomocnicza: Data -> WartoÅ›Ä‡ Portfela (Equity)
+      // DziÄ™ki temu wiemy, na jakiej wysokoÅ›ci narysowaÄ‡ trÃ³jkÄ…t w danym dniu
       const dateToEquity = {};
       results.chart_dates.forEach((date, index) => {
           dateToEquity[date] = results.equity_curve[index];
       });
 
-      // 2. Przygotowanie markerów KUPNA i SPRZEDAŻY
+      // 2. Przygotowanie markerÃ³w KUPNA i SPRZEDAÅ»Y
       const buys = { x: [], y: [], text: [] };
       const sells = { x: [], y: [], text: [] };
 
       results.trades.forEach(trade => {
           const equityValue = dateToEquity[trade.date];
-          // Jeśli z jakiegoś powodu daty nie ma w mapie (rzadkie), pomijamy
+          // JeÅ›li z jakiegoÅ› powodu daty nie ma w mapie (rzadkie), pomijamy
           if (equityValue === undefined) return;
 
-          const tooltip = `Cena: ${trade.price.toFixed(2)}<br>Powód: ${trade.reason}`;
+          const tooltip = `Cena: ${trade.price.toFixed(2)}<br>PowÃ³d: ${trade.reason}`;
 
           if (trade.type === 'BUY') {
               buys.x.push(trade.date);
@@ -89,10 +89,10 @@ const BacktestPanel = ({ ticker, config }) => {
         name: 'Twoja Strategia',
         line: { color: '#00e676', width: 2 },
         fill: 'tozeroy',
-        fillcolor: 'rgba(0, 230, 118, 0.05)' // Bardzo delikatne tło
+        fillcolor: 'rgba(0, 230, 118, 0.05)' // Bardzo delikatne tÅ‚o
       });
 
-      // Markery KUPNA (Zielone trójkąty w górę)
+      // Markery KUPNA (Zielone trÃ³jkÄ…ty w gÃ³rÄ™)
       if (buys.x.length > 0) {
           plotData.push({
               x: buys.x,
@@ -106,13 +106,13 @@ const BacktestPanel = ({ ticker, config }) => {
           });
       }
 
-      // Markery SPRZEDAŻY (Czerwone trójkąty w dół)
+      // Markery SPRZEDAÅ»Y (Czerwone trÃ³jkÄ…ty w dÃ³Å‚)
       if (sells.x.length > 0) {
           plotData.push({
               x: sells.x,
               y: sells.y,
               mode: 'markers',
-              name: 'Sprzedaż',
+              name: 'SprzedaÅ¼',
               type: 'scatter',
               marker: { symbol: 'triangle-down', color: '#ff5252', size: 10, line: { color: 'white', width: 1 } },
               text: sells.text,
@@ -128,7 +128,7 @@ const BacktestPanel = ({ ticker, config }) => {
       <div className="controls-row" style={{ flexWrap: 'wrap', gap: '20px', alignItems: 'flex-end', borderTop: 'none', paddingTop: 0, justifyContent: 'center' }}>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <span style={{fontSize: '0.8em', color: '#888'}}>Sygnały ANFIS</span>
+          <span style={{fontSize: '0.8em', color: '#888'}}>SygnaÅ‚y ANFIS</span>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <label>Kup &ge;</label>
             <input type="number" value={buyThresh} onChange={e => setBuyThresh(e.target.value)} style={{width: '50px'}} />
@@ -156,7 +156,7 @@ const BacktestPanel = ({ ticker, config }) => {
         </div>
 
         <button onClick={runSimulation} disabled={loading} style={{ height: '35px', padding: '0 20px' }}>
-            {loading ? '...' : '▶ Start'}
+            {loading ? '...' : 'â–¶ Start'}
         </button>
       </div>
 
@@ -204,7 +204,7 @@ const BacktestPanel = ({ ticker, config }) => {
                         font: { color: '#d1d4dc' },
                         margin: { t: 40, b: 40, l: 60, r: 20 },
                         xaxis: { showgrid: false },
-                        yaxis: { title: 'Wartość Portfela ($)', gridcolor: '#2a2e39' },
+                        yaxis: { title: 'WartoÅ›Ä‡ Portfela ($)', gridcolor: '#2a2e39' },
                         legend: { orientation: 'h', y: 1.05, x: 0.5, xanchor: 'center' },
                         hovermode: 'closest'
                     }}
@@ -221,7 +221,7 @@ const BacktestPanel = ({ ticker, config }) => {
                             <th style={{padding:'5px'}}>Data</th>
                             <th>Typ</th>
                             <th>Cena</th>
-                            <th>Powód</th>
+                            <th>PowÃ³d</th>
                             <th>Zysk</th>
                         </tr>
                     </thead>

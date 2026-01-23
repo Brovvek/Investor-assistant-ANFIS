@@ -16,8 +16,8 @@ class DataEngine:
 
     def _fetch_fred_direct(self, series_id):
         """
-        Pobiera dane bezpośrednio z URL API FRED, omijając bibliotekę fredapi
-        i problemy z polskimi znakami w ścieżkach systemowych.
+        Pobiera dane bezpoÅ›rednio z URL API FRED, omijajÄ…c bibliotekÄ™ fredapi
+        i problemy z polskimi znakami w Å›cieÅ¼kach systemowych.
         """
         url = f"https://api.stlouisfed.org/fred/series/observations"
         params = {
@@ -28,7 +28,7 @@ class DataEngine:
         
         try:
             response = requests.get(url, params=params)
-            response.raise_for_status() # Zgłoś błąd jeśli status != 200
+            response.raise_for_status() # ZgÅ‚oÅ› bÅ‚Ä…d jeÅ›li status != 200
             data = response.json()
             
             # Parsowanie JSON do DataFrame
@@ -47,20 +47,20 @@ class DataEngine:
             return df['value']
             
         except Exception as e:
-            print(f"⚠️ Błąd pobierania {series_id} (Direct): {e}")
+            print(f"âš ï¸ BÅ‚Ä…d pobierania {series_id} (Direct): {e}")
             return pd.Series(dtype=float)
 
     def get_market_data(self, ticker, period="max"):
-        print(f"Pobieranie danych giełdowych dla {ticker}...")
+        print(f"Pobieranie danych gieÅ‚dowych dla {ticker}...")
         try:
             df = yf.download(ticker, period=period, interval="1d", progress=False)
         except Exception as e:
-            print(f"Błąd yfinance: {e}")
+            print(f"BÅ‚Ä…d yfinance: {e}")
             return pd.DataFrame()
         
         if df.empty: return pd.DataFrame()
 
-        # Obsługa kolumn (MultiIndex fix)
+        # ObsÅ‚uga kolumn (MultiIndex fix)
         if isinstance(df.columns, pd.MultiIndex):
             try: df = df.xs('Close', level=0, axis=1)
             except: 
@@ -72,7 +72,7 @@ class DataEngine:
             df = df.rename(columns={df.columns[0]: 'Price'})
             df = df[['Price']]
 
-        # --- WSKAŹNIKI TECHNICZNE ---
+        # --- WSKAÅ¹NIKI TECHNICZNE ---
         try:
             # 1. RSI
             delta = df['Price'].diff()
@@ -92,13 +92,13 @@ class DataEngine:
             df['MACD'] = macd_line - signal_line 
 
         except Exception as e:
-            print(f"Błąd wskaźników: {e}")
+            print(f"BÅ‚Ä…d wskaÅºnikÃ³w: {e}")
 
         return df
     def get_macro_data(self):
         print("Pobieranie danych makro (Direct API)...")
         
-        # Używamy nowej metody _fetch_fred_direct zamiast biblioteki fredapi
+        # UÅ¼ywamy nowej metody _fetch_fred_direct zamiast biblioteki fredapi
         
         # 1. Yield Curve (T10Y2Y)
         yield_curve = self._fetch_fred_direct('T10Y2Y')
@@ -109,11 +109,11 @@ class DataEngine:
         # 3. M2 Money Supply (M2SL) -> YoY
         m2 = self._fetch_fred_direct('M2SL')
         # M2 jest miesięczne, ale yfinance dzienne. fillna załatwi sprawę później.
-        m2_yoy = m2.pct_change(periods=12) * 100 
+        m2_yoy = m2.pct_change(periods=12, fill_method=None) * 100 
 
         # 4. Inflacja CPI (CPIAUCSL) -> YoY
         cpi = self._fetch_fred_direct('CPIAUCSL')
-        cpi_yoy = cpi.pct_change(periods=12) * 100
+        cpi_yoy = cpi.pct_change(periods=12, fill_method=None) * 100
 
         # Tworzenie DataFrame
         macro_df = pd.DataFrame({
@@ -133,19 +133,19 @@ class DataEngine:
 
         macro_df = self.get_macro_data()
         
-        # Łączenie (Left Join do cen akcji)
+        # ÅÄ…czenie (Left Join do cen akcji)
         df = market_df.join(macro_df, how='left')
         
-        # Wypełnianie danych makro (ffill) - rozciągamy dane miesięczne na dzienne
+        # WypeÅ‚nianie danych makro (ffill) - rozciÄ…gamy dane miesiÄ™czne na dzienne
         df.ffill(inplace=True)
         
-        # Zabezpieczenie: Jeśli API nie zadziałało, wstawiamy zera, żeby aplikacja nie padła
+        # Zabezpieczenie: JeÅ›li API nie zadziaÅ‚aÅ‚o, wstawiamy zera, Å¼eby aplikacja nie padÅ‚a
         expected_cols = ['Yield_Curve', 'VIX', 'M2_Liquidity', 'Inflation_CPI']
         for col in expected_cols:
             if col not in df.columns:
                 df[col] = 0.0 
         
-        # Usuwamy puste wiersze na początku historii
+        # Usuwamy puste wiersze na poczÄ…tku historii
         df.dropna(inplace=True)
         
         return df

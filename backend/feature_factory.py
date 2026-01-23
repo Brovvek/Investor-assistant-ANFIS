@@ -5,14 +5,14 @@ class FeatureFactory:
     @staticmethod
     def generate_features(df_input):
         """
-        Generuje szeroki wachlarz wskaźników technicznych i statystycznych.
+        Generuje szeroki wachlarz wskaÅºnikÃ³w technicznych i statystycznych.
         """
         df = df_input.copy()
         
         # Okna czasowe
         windows = [5, 10, 20, 50, 100]
         
-        # Lista kolumn bazowych - DODALIŚMY MACD
+        # Lista kolumn bazowych - DODALIÅšMY MACD
         base_cols = ['Price']
         possible_cols = ['RSI', 'VIX', 'Yield_Curve', 'M2_Liquidity', 'MACD']
         
@@ -25,10 +25,10 @@ class FeatureFactory:
                 # 1. Momentum (ROC)
                 df[f"{col}_ROC_{w}"] = df[col].pct_change(periods=w)
 
-                # 2. Zmienność (Volatility)
+                # 2. ZmiennoÅ›Ä‡ (Volatility)
                 df[f"{col}_Volat_{w}"] = df[col].rolling(window=w).std()
                 
-                # 3. Odchylenie od średniej (Trend)
+                # 3. Odchylenie od Å›redniej (Trend)
                 sma = df[col].rolling(window=w).mean()
                 # Unikamy dzielenia przez zero (epsilon)
                 df[f"{col}_DistSMA_{w}"] = (df[col] - sma) / sma.replace(0, 0.0001)
@@ -39,7 +39,7 @@ class FeatureFactory:
     @staticmethod
     def select_diverse_top_features(df, target_col='Target', top_n=5, max_correlation=0.6):
         """
-        Wybiera N najlepszych cech, unikając duplikatów (korelacji między sobą).
+        Wybiera N najlepszych cech, unikajÄ…c duplikatÃ³w (korelacji miÄ™dzy sobÄ…).
         """
         # Obliczamy korelacje z Targetem
         all_correlations = df.corr(method='spearman')[target_col].drop(target_col)

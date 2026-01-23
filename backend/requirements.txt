@@ -1,10 +1,13 @@
 flask
+flask-cors
 pandas
+numpy
 yfinance
 fredapi
 scikit-fuzzy
 scipy
-numpy
 networkx
 packaging
-flask-cors
+torch
+scikit-learn
+requests

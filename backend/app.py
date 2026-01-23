@@ -5,6 +5,7 @@ from anfis_engine import AnfisEngine
 from backtest_engine import BacktestEngine
 from optimizer_engine import OptimizerEngine
 from feature_factory import FeatureFactory
+from anfis_ml_engine import AnfisMLEngine
 import pandas as pd
 import numpy as np
 import json
@@ -14,6 +15,21 @@ try:
 except ImportError:
     FRED_API_KEY = None
 
+# Custom JSON encoder for numpy types
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
+
+def json_dumps(obj):
+    """JSON dumps with numpy support"""
+    return json.dumps(obj, cls=NumpyEncoder)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -21,16 +37,15 @@ data_engine = DataEngine(api_key=FRED_API_KEY)
 anfis_engine = AnfisEngine()
 backtester = BacktestEngine()
 optimizer = OptimizerEngine()
+anfis_ml = AnfisMLEngine()  # New ML Engine
 
 # --- FUNKCJE POMOCNICZE ---
 
 def normalize_rank(series, window=252):
     """
-    ZMIANA: Skrócono okno do 252 dni (1 rok).
-    Mniejsze ryzyko ucięcia danych na starcie.
+    Normalizacja rang z oknem 252 dni (1 rok).
     """
     if series.empty: return series
-    # Min_periods=1 sprawia, że liczy rangę nawet jak ma mało danych na początku
     return series.rolling(window, min_periods=1).rank(pct=True) * 100
 
 def prepare_data_with_features(ticker):
@@ -47,23 +62,17 @@ def prepare_data_with_features(ticker):
     # 3. Normalizacja Hybrydowa
     cols_to_check = [c for c in df.columns if c not in ['Date', 'Price', 'Open', 'High', 'Low', 'Close', 'Adj Close']]
     
-    # Zmieniono okno na 252 (1 rok) dla większej dostępności danych
     window = 252 
     
     for col in cols_to_check:
         if col == 'RSI' or 'RSI_' in col and 'Rank' not in col:
-            # RSI zostawiamy surowe, ale wypełniamy dziury 50-tką
             df[col] = df[col].fillna(50)
         else:
-            # Reszta (VIX, Makro) -> Rangi
             df[col] = normalize_rank(df[col], window).fillna(50)
     
-    # --- KLUCZOWA ZMIANA ---
-    # Zamiast dropna() (które kasuje 2 lata danych), używamy bfill/ffill
-    # Dzięki temu backtest zadziała nawet na początku historii
-    df.fillna(method='bfill', inplace=True) # Wypełnij wstecz
-    df.fillna(method='ffill', inplace=True) # Wypełnij w przód
-    df.fillna(50, inplace=True) # Ostateczność: środek skali
+    df.bfill(inplace=True)
+    df.ffill(inplace=True)
+    df.fillna(50, inplace=True)
     
     return df
 
@@ -86,10 +95,6 @@ def get_tickers():
         {"symbol": "EURUSD=X", "name": "EUR/USD"}
     ])
 
-# ... (Pozostałe endpointy: auto_strategy, correlations - BEZ ZMIAN) ...
-# Wklej tutaj resztę endpointów z poprzedniej wersji (są poprawne).
-# Jedyna ważna zmiana była wyżej w funkcji `prepare_data_with_features`
-
 @app.route('/api/auto_strategy', methods=['POST'])
 def auto_strategy():
     req_data = request.json
@@ -99,7 +104,6 @@ def auto_strategy():
         df = FeatureFactory.generate_features(df_raw)
         df['Target'] = df['Price'].shift(-30) / df['Price'] - 1
         
-        # Tu też używamy bezpieczniejszego wypełniania
         df.fillna(method='ffill', inplace=True)
         df.dropna(inplace=True)
         
@@ -184,7 +188,6 @@ def run_backtest():
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
     
-    # Parametry
     buy_thr = float(req_data.get('buyThreshold', 70))
     sell_thr = float(req_data.get('sellThreshold', 30))
     stop_loss = float(req_data.get('stopLoss', 5)) / 100.0
@@ -199,7 +202,6 @@ def run_backtest():
         df_analysis = df.tail(1260).copy()
         active_features = [k for k, v in config.items() if v.get('enabled')]
         
-        # DEBUG: Sprawdzamy czy w ogóle mamy dane
         print(f"Backtest: Analiza {len(df_analysis)} wierszy dla {ticker}")
         
         for index, row in df_analysis.iterrows():
@@ -208,7 +210,6 @@ def run_backtest():
             
         df_analysis['Sentiment_Oscillator'] = oscillator_values
         
-        # DEBUG: Sprawdzamy czy oscylator działa (czy nie jest stale 50)
         max_score = max(oscillator_values) if oscillator_values else 0
         min_score = min(oscillator_values) if oscillator_values else 0
         print(f"DEBUG ANFIS: Min={min_score:.2f}, Max={max_score:.2f}")
@@ -238,12 +239,321 @@ def optimize():
         try:
             df = data_engine.prepare_dataset(ticker)
             def on_progress(percent):
-                yield json.dumps({"status": "progress", "value": percent}) + "\n"
+                yield json_dumps({"status": "progress", "value": percent}) + "\n"
             best_weights = optimizer.optimize_weights(df, progress_callback=on_progress)
-            yield json.dumps({"status": "done", "result": best_weights}) + "\n"
+            yield json_dumps({"status": "done", "result": best_weights}) + "\n"
         except Exception as e:
-            yield json.dumps({"status": "error", "message": str(e)}) + "\n"
+            yield json_dumps({"status": "error", "message": str(e)}) + "\n"
     return Response(generate(), mimetype='application/x-json-stream')
+
+
+# ============================================================================
+# NEW ENDPOINTS: ANFIS Machine Learning for Price Prediction
+# ============================================================================
+
+@app.route('/api/anfis_ml/train', methods=['POST'])
+def train_anfis_ml():
+    """
+    Train ANFIS model for price prediction.
+    
+    Expected JSON payload:
+    {
+        "ticker": "^GSPC",
+        "config": { "RSI": {"enabled": true, "weight": 1.0, "direction": -1}, ... },
+        "epochs": 100,
+        "num_mfs": 3,
+        "batch_size": 64,
+        "learning_rate": 0.01,
+        "mf_type": "gauss",  // gauss, bell, tri
+        "hybrid": true,
+        "optimizer": "adam",  // adam, sgd, rprop
+        "lookahead": 1  // days ahead to predict
+    }
+    """
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    config = req_data.get('config', {})
+    
+    # Training parameters
+    epochs = int(req_data.get('epochs', 100))
+    num_mfs = int(req_data.get('num_mfs', 3))
+    batch_size = int(req_data.get('batch_size', 64))
+    learning_rate = float(req_data.get('learning_rate', 0.01))
+    mf_type = req_data.get('mf_type', 'gauss')
+    hybrid = req_data.get('hybrid', True)
+    optimizer_type = req_data.get('optimizer', 'adam')
+    lookahead = int(req_data.get('lookahead', 1))
+    
+    try:
+        # Prepare data with features
+        df = prepare_data_with_features(ticker)
+        if df.empty:
+            return jsonify({"status": "error", "message": "Brak danych dla tego tickera"}), 400
+        
+        # Create new engine instance for this training
+        ml_engine = AnfisMLEngine()
+        
+        # Run full training pipeline
+        result = ml_engine.full_training_pipeline(
+            df=df,
+            feature_config=config,
+            num_mfs=num_mfs,
+            epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            mf_type=mf_type,
+            hybrid=hybrid,
+            optimizer_type=optimizer_type,
+            lookahead=lookahead
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error", 
+            "message": str(e)
+        }), 500
+
+
+@app.route('/api/anfis_ml/train_stream', methods=['POST'])
+def train_anfis_ml_stream():
+    """
+    Train ANFIS model with streaming progress updates.
+    Returns JSON lines with progress and final results.
+    """
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    config = req_data.get('config', {})
+    
+    epochs = int(req_data.get('epochs', 100))
+    num_mfs = int(req_data.get('num_mfs', 3))
+    batch_size = int(req_data.get('batch_size', 64))
+    learning_rate = float(req_data.get('learning_rate', 0.01))
+    mf_type = req_data.get('mf_type', 'gauss')
+    hybrid = req_data.get('hybrid', True)
+    optimizer_type = req_data.get('optimizer', 'adam')
+    lookahead = int(req_data.get('lookahead', 1))
+    
+    @stream_with_context
+    def generate():
+        try:
+            # Prepare data
+            yield json_dumps({"status": "preparing", "message": "Przygotowywanie danych..."}) + "\n"
+            
+            df = prepare_data_with_features(ticker)
+            if df.empty:
+                yield json_dumps({"status": "error", "message": "Brak danych"}) + "\n"
+                return
+            
+            # Create ML engine
+            ml_engine = AnfisMLEngine()
+            
+            # Prepare data for training
+            X_train, X_test, y_train, y_test, dates_test = ml_engine.prepare_data(
+                df, config, lookahead=lookahead
+            )
+            
+            yield json_dumps({
+                "status": "data_ready",
+                "train_samples": len(X_train),
+                "test_samples": len(X_test),
+                "features": ml_engine.feature_names
+            }) + "\n"
+            
+            # Build model
+            ml_engine.build_model(X_train, num_mfs=num_mfs, hybrid=hybrid, mf_type=mf_type)
+            
+            yield json_dumps({
+                "status": "model_built",
+                "num_rules": int(ml_engine.model.num_rules),
+                "num_inputs": int(ml_engine.model.num_in)
+            }) + "\n"
+            
+            # Training with progress callback
+            def progress_cb(epoch, total, metrics):
+                # Yield progress every 5 epochs or at start/end
+                if epoch <= 5 or epoch % 5 == 0 or epoch == total:
+                    pass  # Will be handled in main loop
+            
+            # Custom training loop with streaming
+            from torch.utils.data import TensorDataset, DataLoader
+            import torch
+            
+            train_loader = ml_engine.create_data_loader(X_train, y_train, batch_size)
+            
+            if optimizer_type == 'adam':
+                optimizer = torch.optim.Adam(ml_engine.model.parameters(), lr=learning_rate)
+            elif optimizer_type == 'sgd':
+                optimizer = torch.optim.SGD(ml_engine.model.parameters(), lr=learning_rate, momentum=0.9)
+            else:
+                optimizer = torch.optim.Rprop(ml_engine.model.parameters(), lr=learning_rate)
+            
+            criterion = torch.nn.MSELoss()
+            
+            X_test_tensor = torch.tensor(X_test, dtype=torch.float).to(ml_engine.device)
+            y_test_tensor = torch.tensor(y_test, dtype=torch.float).to(ml_engine.device)
+            
+            history = {'epoch': [], 'train_loss': [], 'val_loss': [], 'val_rmse': [], 'val_mape': []}
+            
+            for epoch in range(epochs):
+                ml_engine.model.train()
+                epoch_loss = 0.0
+                num_batches = 0
+                
+                for X_batch, y_batch in train_loader:
+                    X_batch = X_batch.to(ml_engine.device)
+                    y_batch = y_batch.to(ml_engine.device)
+                    
+                    y_pred = ml_engine.model(X_batch)
+                    loss = criterion(y_pred, y_batch)
+                    
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    
+                    epoch_loss += loss.item()
+                    num_batches += 1
+                
+                # Hybrid learning
+                if ml_engine.model.hybrid:
+                    X_train_tensor = torch.tensor(X_train, dtype=torch.float).to(ml_engine.device)
+                    y_train_tensor = torch.tensor(y_train, dtype=torch.float).to(ml_engine.device)
+                    with torch.no_grad():
+                        ml_engine.model.fit_coeff(X_train_tensor, y_train_tensor)
+                
+                # Validation
+                ml_engine.model.eval()
+                with torch.no_grad():
+                    y_val_pred = ml_engine.model(X_test_tensor)
+                    val_loss = criterion(y_val_pred, y_test_tensor).item()
+                    
+                    train_loss = epoch_loss / num_batches
+                    val_rmse = np.sqrt(val_loss)
+                    
+                    y_val_pred_orig = ml_engine.scaler_y.inverse_transform(y_val_pred.cpu().numpy())
+                    y_test_orig = ml_engine.scaler_y.inverse_transform(y_test)
+                    mape = np.mean(np.abs((y_test_orig - y_val_pred_orig) / (y_test_orig + 1e-9))) * 100
+                
+                history['epoch'].append(epoch + 1)
+                history['train_loss'].append(train_loss)
+                history['val_loss'].append(val_loss)
+                history['val_rmse'].append(val_rmse)
+                history['val_mape'].append(mape)
+                
+                # Stream progress
+                if epoch == 0 or (epoch + 1) % max(1, epochs // 20) == 0 or epoch == epochs - 1:
+                    yield json_dumps({
+                        "status": "training",
+                        "epoch": epoch + 1,
+                        "total_epochs": epochs,
+                        "progress": int((epoch + 1) / epochs * 100),
+                        "train_loss": float(train_loss),
+                        "val_loss": float(val_loss),
+                        "val_rmse": float(val_rmse),
+                        "val_mape": float(mape)
+                    }) + "\n"
+            
+            # Final predictions
+            y_test_pred = ml_engine.predict(X_test)
+            y_test_actual = ml_engine.scaler_y.inverse_transform(y_test)
+            
+            # Metrics
+            test_mse = np.mean((y_test_actual - y_test_pred) ** 2)
+            test_rmse = np.sqrt(test_mse)
+            test_mae = np.mean(np.abs(y_test_actual - y_test_pred))
+            test_mape = np.mean(np.abs((y_test_actual - y_test_pred) / (y_test_actual + 1e-9))) * 100
+            
+            # Direction accuracy
+            if len(y_test_actual) > 1:
+                actual_dir = np.sign(np.diff(y_test_actual.flatten()))
+                pred_dir = np.sign(np.diff(y_test_pred.flatten()))
+                dir_acc = np.mean(actual_dir == pred_dir) * 100
+            else:
+                dir_acc = 0
+            
+            # MF data
+            mf_plots = {}
+            mf_data = ml_engine.get_membership_functions()
+            for var_name, var_data in mf_data.items():
+                x_range = var_data['x_range']
+                x_vals = np.linspace(x_range[0], x_range[1], 100)
+                mf_values = ml_engine.evaluate_membership(var_name, x_vals)
+                mf_plots[var_name] = {
+                    'x': x_vals.tolist(),
+                    'mfs': mf_values,
+                    'params': var_data['mfs']
+                }
+            
+            # Format dates
+            dates_str = [d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d) for d in dates_test]
+            
+            # Final result
+            yield json_dumps({
+                "status": "done",
+                "model_summary": ml_engine.get_model_summary(),
+                "training_history": {
+                    "epochs": history['epoch'],
+                    "train_loss": history['train_loss'],
+                    "val_loss": history['val_loss'],
+                    "val_rmse": history['val_rmse'],
+                    "val_mape": history['val_mape']
+                },
+                "metrics": {
+                    "test_mse": float(test_mse),
+                    "test_rmse": float(test_rmse),
+                    "test_mae": float(test_mae),
+                    "test_mape": float(test_mape),
+                    "direction_accuracy": float(dir_acc),
+                    "train_samples": len(X_train),
+                    "test_samples": len(X_test)
+                },
+                "predictions": {
+                    "dates": dates_str,
+                    "actual": y_test_actual.flatten().tolist(),
+                    "predicted": y_test_pred.flatten().tolist()
+                },
+                "membership_functions": mf_plots,
+                "rules": ml_engine.get_rules_description()[:20],
+                "feature_importance": ml_engine._calculate_feature_importance(X_test, y_test)
+            }) + "\n"
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield json_dumps({"status": "error", "message": str(e)}) + "\n"
+    
+    return Response(generate(), mimetype='application/x-json-stream')
+
+
+@app.route('/api/anfis_ml/available_features', methods=['POST'])
+def get_available_features():
+    """Get list of available features for a ticker."""
+    req_data = request.json
+    ticker = req_data.get('ticker', '^GSPC')
+    
+    try:
+        df = prepare_data_with_features(ticker)
+        if df.empty:
+            return jsonify({"error": "Brak danych"}), 400
+        
+        # Get all numeric columns except price-related
+        exclude_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close']
+        features = [c for c in df.columns if c not in exclude_cols and df[c].dtype in ['float64', 'int64']]
+        
+        return jsonify({
+            "features": features,
+            "total_rows": len(df),
+            "date_range": {
+                "start": str(df.index.min()),
+                "end": str(df.index.max())
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)

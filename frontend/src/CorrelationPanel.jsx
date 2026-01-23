@@ -16,7 +16,7 @@ const CorrelationPanel = ({ ticker }) => {
       setCorrData(response.data);
     } catch (err) {
       console.error(err);
-      alert("Błąd analizy korelacji");
+      alert("BÅ‚Ä…d analizy korelacji");
     } finally {
       setLoading(false);
     }
@@ -30,8 +30,8 @@ const CorrelationPanel = ({ ticker }) => {
     return (
       <div style={{ textAlign: 'center', padding: '40px', color: '#888', background: '#1e222d', borderRadius: '8px' }}>
         <div className="loading-spinner"></div>
-        <p style={{ marginTop: '15px' }}>⏳ Inżynieria Cech w toku...</p>
-        <p style={{ fontSize: '0.8em' }}>Generowanie setek wskaźników i badanie zależności...</p>
+        <p style={{ marginTop: '15px' }}>â³ InÅ¼ynieria Cech w toku...</p>
+        <p style={{ fontSize: '0.8em' }}>Generowanie setek wskaÅºnikÃ³w i badanie zaleÅ¼noÅ›ci...</p>
       </div>
     );
   }
@@ -40,22 +40,22 @@ const CorrelationPanel = ({ ticker }) => {
 
   // --- PRZYGOTOWANIE DANYCH DLA PLOTLY ---
   
-  // Oś X: Nazwy Wskaźników - OGRANICZAMY DO TOP 20
-  // Backend zwraca 50, ale my wyświetlamy tylko 20 najlepszych dla czytelności
+  // OÅ› X: Nazwy WskaÅºnikÃ³w - OGRANICZAMY DO TOP 20
+  // Backend zwraca 50, ale my wyÅ›wietlamy tylko 20 najlepszych dla czytelnoÅ›ci
   const xValues = Object.keys(corrData).slice(0, 20);
   
-  // Oś Y: Metody badawcze
-  const yValues = ['Pearson (Liniowa)', 'Spearman (Rangowa)', 'Kendall (Zgodność)'];
+  // OÅ› Y: Metody badawcze
+  const yValues = ['Pearson (Liniowa)', 'Spearman (Rangowa)', 'Kendall (ZgodnoÅ›Ä‡)'];
 
-  // Oś Z: Wartości korelacji (Macierz)
-  // Mapujemy tylko te xValues, które zostały po przycięciu (Top 20)
+  // OÅ› Z: WartoÅ›ci korelacji (Macierz)
+  // Mapujemy tylko te xValues, ktÃ³re zostaÅ‚y po przyciÄ™ciu (Top 20)
   const zValues = [
     xValues.map(feat => corrData[feat]['pearson']),
     xValues.map(feat => corrData[feat]['spearman']),
     xValues.map(feat => corrData[feat]['kendall'])
   ];
 
-  // Tekst do wyświetlenia w komórkach (Formatowanie %)
+  // Tekst do wyÅ›wietlenia w komÃ³rkach (Formatowanie %)
   const textValues = zValues.map(row => 
     row.map(val => `${(val * 100).toFixed(0)}%`)
   );
@@ -64,7 +64,7 @@ const CorrelationPanel = ({ ticker }) => {
     <div style={{ width: '100%', padding: '10px', background: '#1e222d', borderRadius: '8px', border: '1px solid #363a45' }}>
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
              <h4 style={{margin:0, color: '#d1d4dc'}}>
-               📊 Mapa Korelacji (Top 20 Wskaźników)
+               ðŸ“Š Mapa Korelacji (Top 20 WskaÅºnikÃ³w)
                <span style={{fontSize: '0.7em', color: '#888', marginLeft: '10px', fontWeight: 'normal'}}>
                  (Cieplej = Silniejsza korelacja)
                </span>
@@ -74,7 +74,7 @@ const CorrelationPanel = ({ ticker }) => {
                 className="ai-button"
                 style={{fontSize: '0.8em', padding: '6px 12px', background: '#444', border: 'none'}}
              >
-                Odśwież
+                OdÅ›wieÅ¼
              </button>
         </div>
 
@@ -106,7 +106,7 @@ const CorrelationPanel = ({ ticker }) => {
                     xaxis: { 
                         side: 'bottom',
                         tickangle: -45,
-                        tickfont: { size: 11 } // Nieco większa czcionka, bo jest mniej kolumn
+                        tickfont: { size: 11 } // Nieco wiÄ™ksza czcionka, bo jest mniej kolumn
                     },
                     yaxis: {
                         tickfont: { size: 12, style: 'bold' }

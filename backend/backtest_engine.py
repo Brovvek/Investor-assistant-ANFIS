@@ -36,7 +36,7 @@ class BacktestEngine:
             action = None
             reason = ""
 
-            # --- LOGIKA WYJŚCIA ---
+            # --- LOGIKA WYJÅšCIA ---
             if in_market:
                 highest_price_since_entry = max(highest_price_since_entry, price)
                 
@@ -49,9 +49,9 @@ class BacktestEngine:
                 elif score <= sell_threshold:
                     action = "SELL"; reason = "ANFIS Signal"
 
-            # --- LOGIKA WEJŚCIA ---
+            # --- LOGIKA WEJÅšCIA ---
             elif not in_market:
-                # Jeśli score jest wysoki (np. 80), a próg to 70 -> SYGNAŁ KUPNA
+                # JeÅ›li score jest wysoki (np. 80), a prÃ³g to 70 -> SYGNAÅ KUPNA
                 if score >= buy_threshold:
                     action = "BUY"; reason = "ANFIS Signal"
 
@@ -59,7 +59,7 @@ class BacktestEngine:
             if action == "BUY":
                 cost = price * (1 + fee_pct)
                 # NAPRAWA: Zmieniono warunek 'cash >= cost' na 'cash > 1'
-                # Teraz można kupować ułamki (np. 0.1 BTC)
+                # Teraz moÅ¼na kupowaÄ‡ uÅ‚amki (np. 0.1 BTC)
                 if cash > 1.0: 
                     position = cash / cost
                     cash = 0
@@ -93,8 +93,8 @@ class BacktestEngine:
             bnh_equity_curve.append(bnh_val)
             dates.append(date)
 
-        # --- METRYKI KOŃCOWE ---
-        # Zabezpieczenie przed pustą listą equity_curve
+        # --- METRYKI KOÅƒCOWE ---
+        # Zabezpieczenie przed pustÄ… listÄ… equity_curve
         if not equity_curve:
             return {"error": "Brak danych do symulacji"}
 

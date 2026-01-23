@@ -18,7 +18,7 @@ body {
   padding-bottom: 50px;
 }
 
-/* 2. NAGŁÓWEK */
+/* 2. NAGÅÃ“WEK */
 .header {
   display: flex;
   justify-content: space-between;
@@ -37,7 +37,7 @@ body {
   color: #2962ff;
 }
 
-/* 3. KONTENER GŁÓWNY (Szary Box na górze) */
+/* 3. KONTENER GÅÃ“WNY (Szary Box na gÃ³rze) */
 .main-controls-box {
   background: #1e222d;
   padding: 20px;
@@ -47,11 +47,11 @@ body {
   box-shadow: 0 4px 6px rgba(0,0,0,0.2);
 }
 
-/* 4. KAFELKI WSKAŹNIKÓW (To co się rozjechało) */
+/* 4. KAFELKI WSKAÅ¹NIKÃ“W (To co siÄ™ rozjechaÅ‚o) */
 .indicators-bar {
   display: flex;
   flex-wrap: wrap; /* Kluczowe: zawijanie wierszy */
-  gap: 15px;       /* Odstęp między kafelkami */
+  gap: 15px;       /* OdstÄ™p miÄ™dzy kafelkami */
   margin-bottom: 20px;
   align-items: center;
 }
@@ -62,7 +62,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 10px 15px;
-  background: #2a2e39; /* Ciemniejsze tło kafelka */
+  background: #2a2e39; /* Ciemniejsze tÅ‚o kafelka */
   border-radius: 8px;
   border: 1px solid #363a45;
   transition: all 0.2s ease;
@@ -229,7 +229,7 @@ button:disabled {
 
 .heatmap-table {
   border-collapse: collapse;
-  width: max-content; /* Rozciąga tabelę poza ekran */
+  width: max-content; /* RozciÄ…ga tabelÄ™ poza ekran */
 }
 
 .heatmap-table th, .heatmap-table td {
@@ -250,12 +250,12 @@ button:disabled {
   border-right: 2px solid #444;
 }
 
-/* Pionowy tekst w nagłówkach */
+/* Pionowy tekst w nagÅ‚Ã³wkach */
 .vertical-text {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   white-space: nowrap;
-  height: 140px; /* Wysokość nagłówka */
+  height: 140px; /* WysokoÅ›Ä‡ nagÅ‚Ã³wka */
   display: flex;
   align-items: center;
   justify-content: left;
@@ -266,4 +266,237 @@ button:disabled {
   text-align: left;
   padding-left: 15px;
   min-width: 100px;
+}
+
+/* --- ANFIS ML PANEL STYLES --- */
+.param-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.param-group label {
+  font-size: 0.8em;
+  color: #888;
+  margin-bottom: 5px;
+}
+
+.param-group input,
+.param-group select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #363a45;
+  background: #131722;
+  color: #fff;
+  font-size: 0.9em;
+}
+
+.param-group input:focus,
+.param-group select:focus {
+  border-color: #2962ff;
+  outline: none;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #363a45;
+  border-top: 4px solid #2962ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Progress Bar Animation */
+.progress-bar {
+  height: 8px;
+  background: #2a2e39;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2962ff, #00c853);
+  transition: width 0.3s ease;
+}
+
+/* Tab Buttons */
+.tab-button {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #363a45;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s;
+}
+
+.tab-button:hover {
+  border-color: #2962ff;
+  color: #d1d4dc;
+}
+
+.tab-button.active {
+  background: #2962ff;
+  border-color: #2962ff;
+  color: #fff;
+}
+
+/* Metric Cards */
+.metric-card {
+  background: #2a2e39;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #363a45;
+}
+
+.metric-card .value {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin: 8px 0;
+}
+
+.metric-card .label {
+  font-size: 0.85em;
+  color: #888;
+}
+
+.metric-card .sublabel {
+  font-size: 0.75em;
+  color: #555;
+}
+
+/* Rules Table */
+.rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+.rules-table th,
+.rules-table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #2a2e39;
+}
+
+.rules-table th {
+  background: #1a1d26;
+  color: #888;
+  font-weight: normal;
+  position: sticky;
+  top: 0;
+}
+
+.rules-table tr:hover {
+  background: rgba(41, 98, 255, 0.1);
+}
+
+/* MF Plot Container */
+.mf-plot-container {
+  background: #1a1d26;
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid #2a2e39;
+}
+
+.mf-params {
+  font-size: 0.75em;
+  color: #666;
+  margin-top: 5px;
+  font-family: monospace;
+}
+
+/* Training Live Metrics */
+.live-metrics {
+  display: flex;
+  gap: 20px;
+  font-size: 0.85em;
+  color: #888;
+  padding: 10px;
+  background: rgba(41, 98, 255, 0.1);
+  border-radius: 4px;
+}
+
+.live-metrics .metric {
+  display: flex;
+  gap: 5px;
+}
+
+.live-metrics .metric-name {
+  color: #666;
+}
+
+.live-metrics .metric-value {
+  color: #89b4fa;
+  font-family: monospace;
+}
+
+/* Error Box */
+.error-box {
+  background: rgba(255, 82, 82, 0.1);
+  border: 1px solid #ff5252;
+  border-radius: 8px;
+  padding: 15px;
+  color: #ff5252;
+}
+
+/* Success Box */
+.success-box {
+  background: rgba(0, 230, 118, 0.1);
+  border: 1px solid #00e676;
+  border-radius: 8px;
+  padding: 15px;
+  color: #00e676;
+}
+
+/* Feature Importance Bar */
+.importance-bar {
+  height: 20px;
+  background: linear-gradient(90deg, #2962ff, #00c853);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+/* Model Summary Card */
+.model-summary {
+  margin-top: 20px;
+  padding: 15px;
+  background: #1a1d26;
+  border-radius: 8px;
+  border: 1px solid #363a45;
+  font-size: 0.85em;
+}
+
+.model-summary h4 {
+  margin: 0 0 10px 0;
+  color: #d1d4dc;
+}
+
+.model-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.model-summary-item {
+  display: flex;
+  gap: 5px;
+}
+
+.model-summary-item .key {
+  color: #888;
+}
+
+.model-summary-item .value {
+  color: #d1d4dc;
 }

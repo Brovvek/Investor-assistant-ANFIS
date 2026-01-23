@@ -13,7 +13,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       onConfigChange(res.data);
       alert("Strategia AI wygenerowana!");
     } catch (err) {
-      alert("Błąd generowania strategii.");
+      alert("BÅ‚Ä…d generowania strategii.");
     } finally {
       setGenerating(false);
     }
@@ -34,7 +34,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       },
       'MACD': { 
           enabled: true, 
-          weight: 1.5, // Zwiększona waga dla trendu
+          weight: 1.5, // ZwiÄ™kszona waga dla trendu
           direction: 1 // MACD High = Trend Up = BUY
       },
       'Yield_Curve': { 
@@ -44,7 +44,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       },
       'M2_Liquidity': { 
           enabled: true, 
-          weight: 1.2, // Płynność jest ważna
+          weight: 1.2, // PÅ‚ynnoÅ›Ä‡ jest waÅ¼na
           direction: 1 // M2 Growth = BUY
       }
     };
@@ -62,9 +62,9 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
 
   const formatLabel = (key) => {
     if (key.includes('ROC')) return `Momentum (${key})`;
-    if (key.includes('Volat')) return `Zmienność (${key})`;
+    if (key.includes('Volat')) return `ZmiennoÅ›Ä‡ (${key})`;
     if (key.includes('DistSMA')) return `Trend SMA (${key})`;
-    if (key === 'M2_Liquidity') return 'Płynność M2';
+    if (key === 'M2_Liquidity') return 'PÅ‚ynnoÅ›Ä‡ M2';
     if (key === 'Yield_Curve') return 'Yield Curve';
     return key;
   };
@@ -73,7 +73,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h4 style={{ margin: 0, fontWeight: 600 }}>
-          Aktywne Wskaźniki
+          Aktywne WskaÅºniki
         </h4>
         
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -86,7 +86,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
               }}
               title="RSI, VIX, MACD, Yield, M2"
             >
-              🏛️ Klasyczna
+              ðŸ›ï¸ Klasyczna
             </button>
 
             <button 
@@ -98,13 +98,13 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
                 background: 'linear-gradient(135deg, #00c853 0%, #64dd17 100%)' 
               }}
             >
-              {generating ? 'Szukanie...' : '🚀 Generuj (AI)'}
+              {generating ? 'Szukanie...' : 'ðŸš€ Generuj (AI)'}
             </button>
         </div>
       </div>
 
       <div className="indicators-bar">
-        {features.length === 0 && <div style={{color:'#666', fontSize:'0.9em', padding:'10px'}}>Wybierz strategię powyżej.</div>}
+        {features.length === 0 && <div style={{color:'#666', fontSize:'0.9em', padding:'10px'}}>Wybierz strategiÄ™ powyÅ¼ej.</div>}
 
         {features.map((key) => {
           const itemConfig = config[key];

@@ -53,15 +53,15 @@ class OptimizerEngine:
         print("Rozpoczynanie AI...")
         
         # Ustawienia algorytmu
-        max_iter = 10 # Zwiększamy trochę liczbę iteracji dla lepszego efektu
+        max_iter = 10 # ZwiÄ™kszamy trochÄ™ liczbÄ™ iteracji dla lepszego efektu
         current_iter = 0
 
-        # Funkcja wywoływana po każdej generacji algorytmu
+        # Funkcja wywoÅ‚ywana po kaÅ¼dej generacji algorytmu
         def callback_fn(xk, convergence=None):
             nonlocal current_iter
             current_iter += 1
             if progress_callback:
-                # Obliczamy procent (zabezpieczenie przed wyjściem poza 100%)
+                # Obliczamy procent (zabezpieczenie przed wyjÅ›ciem poza 100%)
                 progress = min(int((current_iter / max_iter) * 100), 99)
                 progress_callback(progress)
 
