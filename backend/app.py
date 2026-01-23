@@ -5,7 +5,15 @@ from anfis_engine import AnfisEngine
 from backtest_engine import BacktestEngine
 from optimizer_engine import OptimizerEngine
 from feature_factory import FeatureFactory
-from anfis_ml_engine import AnfisMLEngine
+
+# Try to import v2, fallback to v1
+try:
+    from anfis_ml_engine_v2 import AnfisMLEngine
+    print("✅ Using ANFIS ML Engine v2.0 (Advanced)")
+except ImportError:
+    from anfis_ml_engine import AnfisMLEngine
+    print("⚠️ Using ANFIS ML Engine v1.0 (Basic)")
+
 import pandas as pd
 import numpy as np
 import json
@@ -328,6 +336,7 @@ def train_anfis_ml_stream():
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
     
+    # Basic parameters
     epochs = int(req_data.get('epochs', 100))
     num_mfs = int(req_data.get('num_mfs', 3))
     batch_size = int(req_data.get('batch_size', 64))
@@ -336,6 +345,12 @@ def train_anfis_ml_stream():
     hybrid = req_data.get('hybrid', True)
     optimizer_type = req_data.get('optimizer', 'adam')
     lookahead = int(req_data.get('lookahead', 1))
+    
+    # NEW: Advanced parameters
+    prediction_type = req_data.get('prediction_type', 'returns')
+    scaler_type = req_data.get('scaler_type', 'robust')
+    early_stopping_patience = int(req_data.get('early_stopping_patience', 20))
+    training_days = int(req_data.get('training_days', 0))  # 0 = all data
     
     @stream_with_context
     def generate():
@@ -348,19 +363,28 @@ def train_anfis_ml_stream():
                 yield json_dumps({"status": "error", "message": "Brak danych"}) + "\n"
                 return
             
+            # Filter to last N days if specified
+            if training_days > 0 and len(df) > training_days:
+                df = df.tail(training_days).copy()
+                print(f"📅 Ograniczono dane do ostatnich {training_days} dni ({len(df)} wierszy)")
+            
             # Create ML engine
             ml_engine = AnfisMLEngine()
             
             # Prepare data for training
             X_train, X_test, y_train, y_test, dates_test = ml_engine.prepare_data(
-                df, config, lookahead=lookahead
+                df, config, lookahead=lookahead,
+                prediction_type=prediction_type,
+                scaler_type=scaler_type
             )
             
             yield json_dumps({
                 "status": "data_ready",
                 "train_samples": len(X_train),
                 "test_samples": len(X_test),
-                "features": ml_engine.feature_names
+                "features": ml_engine.feature_names,
+                "total_days": len(df),
+                "training_days_requested": training_days
             }) + "\n"
             
             # Build model
@@ -396,7 +420,7 @@ def train_anfis_ml_stream():
             X_test_tensor = torch.tensor(X_test, dtype=torch.float).to(ml_engine.device)
             y_test_tensor = torch.tensor(y_test, dtype=torch.float).to(ml_engine.device)
             
-            history = {'epoch': [], 'train_loss': [], 'val_loss': [], 'val_rmse': [], 'val_mape': []}
+            history = {'epoch': [], 'train_loss': [], 'val_loss': [], 'val_rmse': [], 'val_mape': [], 'val_direction_acc': [], 'learning_rate': []}
             
             for epoch in range(epochs):
                 ml_engine.model.train()
@@ -435,13 +459,21 @@ def train_anfis_ml_stream():
                     
                     y_val_pred_orig = ml_engine.scaler_y.inverse_transform(y_val_pred.cpu().numpy())
                     y_test_orig = ml_engine.scaler_y.inverse_transform(y_test)
-                    mape = np.mean(np.abs((y_test_orig - y_val_pred_orig) / (y_test_orig + 1e-9))) * 100
+                    mape = np.mean(np.abs((y_test_orig - y_val_pred_orig) / (np.abs(y_test_orig) + 1e-9))) * 100
+                    mape = min(mape, 999)  # Cap MAPE
+                    
+                    # Direction accuracy (for returns: check sign match)
+                    actual_sign = np.sign(y_test_orig.flatten())
+                    pred_sign = np.sign(y_val_pred_orig.flatten())
+                    dir_acc = np.mean(actual_sign == pred_sign) * 100
                 
                 history['epoch'].append(epoch + 1)
-                history['train_loss'].append(train_loss)
-                history['val_loss'].append(val_loss)
-                history['val_rmse'].append(val_rmse)
-                history['val_mape'].append(mape)
+                history['train_loss'].append(float(train_loss))
+                history['val_loss'].append(float(val_loss))
+                history['val_rmse'].append(float(val_rmse))
+                history['val_mape'].append(float(mape))
+                history['val_direction_acc'].append(float(dir_acc))
+                history['learning_rate'].append(float(learning_rate))
                 
                 # Stream progress
                 if epoch == 0 or (epoch + 1) % max(1, epochs // 20) == 0 or epoch == epochs - 1:
@@ -453,26 +485,56 @@ def train_anfis_ml_stream():
                         "train_loss": float(train_loss),
                         "val_loss": float(val_loss),
                         "val_rmse": float(val_rmse),
-                        "val_mape": float(mape)
+                        "val_mape": float(mape),
+                        "direction_acc": float(dir_acc)
                     }) + "\n"
             
             # Final predictions
             y_test_pred = ml_engine.predict(X_test)
             y_test_actual = ml_engine.scaler_y.inverse_transform(y_test)
             
-            # Metrics
-            test_mse = np.mean((y_test_actual - y_test_pred) ** 2)
-            test_rmse = np.sqrt(test_mse)
-            test_mae = np.mean(np.abs(y_test_actual - y_test_pred))
-            test_mape = np.mean(np.abs((y_test_actual - y_test_pred) / (y_test_actual + 1e-9))) * 100
-            
-            # Direction accuracy
-            if len(y_test_actual) > 1:
-                actual_dir = np.sign(np.diff(y_test_actual.flatten()))
-                pred_dir = np.sign(np.diff(y_test_pred.flatten()))
-                dir_acc = np.mean(actual_dir == pred_dir) * 100
+            # Calculate metrics - use advanced method if available
+            if hasattr(ml_engine, 'calculate_financial_metrics'):
+                metrics = ml_engine.calculate_financial_metrics(y_test_actual, y_test_pred)
+                metrics['train_samples'] = len(X_train)
+                metrics['test_samples'] = len(X_test)
             else:
-                dir_acc = 0
+                # Fallback to basic metrics
+                test_mse = np.mean((y_test_actual - y_test_pred) ** 2)
+                test_rmse = np.sqrt(test_mse)
+                test_mae = np.mean(np.abs(y_test_actual - y_test_pred))
+                test_mape = np.mean(np.abs((y_test_actual - y_test_pred) / (y_test_actual + 1e-9))) * 100
+                
+                # Direction accuracy - for returns, check sign match
+                if len(y_test_actual) > 1:
+                    actual_sign = np.sign(y_test_actual.flatten())
+                    pred_sign = np.sign(y_test_pred.flatten())
+                    dir_acc = np.mean(actual_sign == pred_sign) * 100
+                else:
+                    dir_acc = 50.0
+                
+                # Correlation
+                if len(y_test_actual) > 2:
+                    correlation = float(np.corrcoef(y_test_actual.flatten(), y_test_pred.flatten())[0, 1])
+                else:
+                    correlation = 0.0
+                
+                # R-squared
+                ss_res = np.sum((y_test_actual - y_test_pred) ** 2)
+                ss_tot = np.sum((y_test_actual - np.mean(y_test_actual)) ** 2)
+                r_squared = float(1 - (ss_res / (ss_tot + 1e-9)))
+                
+                metrics = {
+                    "mse": float(test_mse),
+                    "rmse": float(test_rmse),
+                    "mae": float(test_mae),
+                    "mape": float(min(test_mape, 999)),
+                    "direction_accuracy": float(dir_acc),
+                    "correlation": correlation,
+                    "r_squared": r_squared,
+                    "train_samples": len(X_train),
+                    "test_samples": len(X_test)
+                }
             
             # MF data
             mf_plots = {}
@@ -491,6 +553,10 @@ def train_anfis_ml_stream():
             dates_str = [d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d) for d in dates_test]
             
             # Final result
+            # Add direction_acc to history if available
+            if 'val_direction_acc' not in history:
+                history['val_direction_acc'] = [50.0] * len(history['epoch'])
+            
             yield json_dumps({
                 "status": "done",
                 "model_summary": ml_engine.get_model_summary(),
@@ -499,17 +565,11 @@ def train_anfis_ml_stream():
                     "train_loss": history['train_loss'],
                     "val_loss": history['val_loss'],
                     "val_rmse": history['val_rmse'],
-                    "val_mape": history['val_mape']
+                    "val_mape": history['val_mape'],
+                    "val_direction_acc": history.get('val_direction_acc', [50.0] * len(history['epoch'])),
+                    "learning_rate": history.get('learning_rate', [learning_rate] * len(history['epoch']))
                 },
-                "metrics": {
-                    "test_mse": float(test_mse),
-                    "test_rmse": float(test_rmse),
-                    "test_mae": float(test_mae),
-                    "test_mape": float(test_mape),
-                    "direction_accuracy": float(dir_acc),
-                    "train_samples": len(X_train),
-                    "test_samples": len(X_test)
-                },
+                "metrics": metrics,
                 "predictions": {
                     "dates": dates_str,
                     "actual": y_test_actual.flatten().tolist(),
