@@ -1193,7 +1193,7 @@ button:disabled {
 .history-record-id {
   color: #666;
   font-size: 0.8em;
-  width: 30px;
+  width: 60px;
 }
 
 .history-record-ticker {
@@ -1210,7 +1210,14 @@ button:disabled {
 
 .history-record-accuracy {
   font-weight: bold;
-  width: 60px;
+  width: 120px;
+  font-size: 0.85em;
+}
+
+.history-record-correlation {
+  font-weight: bold;
+  width: 120px;
+  font-size: 0.85em;
 }
 
 .history-record-type {

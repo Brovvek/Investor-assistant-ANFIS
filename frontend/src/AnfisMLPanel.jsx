@@ -194,7 +194,8 @@ const AnfisMLPanel = ({ ticker, config }) => {
           <span className="history-record-id">{row.id || '—'}</span>
           <span className="history-record-ticker">{row.ticker || '—'}</span>
           <span className="history-record-date">{row.timestamp?.slice(0, 16) || '—'}</span>
-          <span className={`history-record-accuracy text-${accClass || 'primary'}`}>{fmt(row.direction_accuracy, 1)}%</span>
+          <span className={`history-record-accuracy text-${accClass || 'primary'}`}>Celność: {fmt(row.direction_accuracy, 1)}%</span>
+          <span className={`history-record-correlation text-${(row.correlation||0)*100 > 50 ? 'green' : (row.correlation||0)*100 > 30 ? 'yellow' : 'orange'}`}>Korelacja: {fmt((row.correlation||0)*100, 1)}%</span>
           <span className="history-record-type">{row.prediction_type || '—'}</span>
           <span className="history-record-notes">{row.notes || ''}</span>
         </div>
@@ -205,7 +206,7 @@ const AnfisMLPanel = ({ ticker, config }) => {
               <div className="grid-metrics">
                 {[['Celność', row.direction_accuracy, accClass], ['RMSE', row.rmse, 'blue'], 
                   ['MAPE', row.mape, 'orange'], ['R²', (row.r_squared||0)*100, 'green-alt'],
-                  ['Korelacja', (row.correlation||0)*100, 'purple'], ['Win Rate', row.win_rate, 'yellow']
+                  ['Korelacja', (row.correlation||0)*100, 'purple']
                 ].map(([label, val, colorClass]) => (
                   <div key={label} className="stat-card">
                     <div className="stat-card-label">{label}</div>
@@ -288,6 +289,14 @@ const AnfisMLPanel = ({ ticker, config }) => {
               <div className="legend-item">
                 <div className="legend-item-title">⚡ Optymalizator</div>
                 <div className="legend-item-desc"><span className="text-blue">Adam</span> = domyślny, najszybszy; <span className="text-blue">AdamW</span> = z regularyzacją; <span className="text-blue">SGD</span> = wolny ale niezawodny.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">🔄 Scaler</div>
+                <div className="legend-item-desc">Normalizacja danych wejściowych: <span className="text-blue">Robust</span> = odporny na outliers (mediana/IQR), <span className="text-blue">Standard</span> = klasyczna normalizacja (średnia/std), <span className="text-blue">MinMax</span> = skalowanie do [0,1].</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">📍 Scatter (Wykres rozrzutu)</div>
+                <div className="legend-item-desc">Porównanie prognoz i rzeczywistych wartości punkt po punkcie. <span className="text-green">Zielone punkty</span> = prawidłowy kierunek, <span className="text-red">czerwone</span> = błędny kierunek. Idealnie mają leżeć na linii y=x.</div>
               </div>
             </div>
           </div>
@@ -383,11 +392,19 @@ const AnfisMLPanel = ({ ticker, config }) => {
               ]} layout={{ paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 40, l: 60, r: 20 }, xaxis: { showgrid: false }, yaxis: { gridcolor: '#2a2e39' }, legend: { orientation: 'h', y: 1.1 } }} useResizeHandler className="chart-full" />
             ) : <div className="empty-state">Brak danych</div>)}
 
-            {activeTab === 'scatter' && (getPredictions().actual?.length > 0 ? (
-              <Plot data={[
-                { x: getPredictions().actual, y: getPredictions().predicted, type: 'scatter', mode: 'markers', marker: { color: getPredictions().actual.map((a, i) => Math.sign(a) === Math.sign(getPredictions().predicted[i]) ? '#00e676' : '#ff5252'), size: 5 } }
-              ]} layout={{ paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 50, l: 60, r: 20 }, xaxis: { title: 'Rzeczywiste', gridcolor: '#2a2e39' }, yaxis: { title: 'Predykcja', gridcolor: '#2a2e39' } }} useResizeHandler className="chart-full" />
-            ) : <div className="empty-state">Brak danych</div>)}
+            {activeTab === 'scatter' && (getPredictions().actual?.length > 0 ? (() => {
+              const preds = getPredictions();
+              const allVals = [...preds.actual, ...preds.predicted].filter(v => !isNaN(v));
+              const minVal = Math.min(...allVals);
+              const maxVal = Math.max(...allVals);
+              const diagLine = [minVal, maxVal];
+              return (
+                <Plot data={[
+                  { x: preds.actual, y: preds.predicted, type: 'scatter', mode: 'markers', marker: { color: preds.actual.map((a, i) => Math.sign(a) === Math.sign(preds.predicted[i]) ? '#00e676' : '#ff5252'), size: 5 }, name: 'Predykcje' },
+                  { x: diagLine, y: diagLine, type: 'scatter', mode: 'lines', name: 'y=x (Idealna)', line: { color: '#cba6f7', width: 2, dash: 'dash' } }
+                ]} layout={{ paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 50, l: 60, r: 20 }, xaxis: { title: 'Rzeczywiste', gridcolor: '#2a2e39' }, yaxis: { title: 'Predykcja', gridcolor: '#2a2e39' }, legend: { orientation: 'h', y: 1.05 } }} useResizeHandler className="chart-full" />
+              );
+            })() : <div className="empty-state">Brak danych</div>)}
 
             {activeTab === 'loss' && (getTrainHistory().epochs?.length > 0 ? (
               <div className="grid-charts">
