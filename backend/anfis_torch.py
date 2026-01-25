@@ -152,19 +152,118 @@ class ConsequentLayer(torch.nn.Module):
         self._coeff = new_coeff
 
     def fit_coeff(self, x, weights, y_actual):
-        x_plus = torch.cat([x, torch.ones(x.shape[0], 1).to(x.device)], dim=1)
-        weighted_x = torch.einsum('bp, bq -> bpq', weights, x_plus)
-        weighted_x[weighted_x == 0] = 1e-12
-        weighted_x_2d = weighted_x.view(weighted_x.shape[0], -1)
-        y_actual_2d = y_actual.view(y_actual.shape[0], -1)
-        try:
-            coeff_2d = torch.linalg.lstsq(weighted_x_2d, y_actual_2d).solution
-        except Exception as e:
-            print('Internal error in lstsq', e)
+        """
+        Fit coefficients using weighted least squares for each rule.
+        weights: (batch, d_rule)
+        x: (batch, d_in)
+        y_actual: (batch,) or (batch, d_out)
+        coeff shape should be: (d_rule, d_out, d_in+1)
+        """
+        batch_size = x.shape[0]
+        n_rules = weights.shape[1]
+        n_in = x.shape[1]
+        
+        # Ensure y_actual is 2D: (batch, d_out)
+        if y_actual.dim() == 1:
+            y_actual = y_actual.unsqueeze(1)
+        d_out = y_actual.shape[1]
+        
+        # Check for NaN/Inf in inputs
+        if torch.isnan(x).any() or torch.isinf(x).any():
+            print('Warning: Input x contains NaN/Inf values')
             return
-        coeff_2d = coeff_2d[0:weighted_x_2d.shape[1]]
-        self.coeff = coeff_2d.view(weights.shape[1], x.shape[1]+1, -1)\
-            .transpose(1, 2)
+        if torch.isnan(y_actual).any() or torch.isinf(y_actual).any():
+            print('Warning: Output y_actual contains NaN/Inf values')
+            return
+        if torch.isnan(weights).any() or torch.isinf(weights).any():
+            print('Warning: Weights contain NaN/Inf values')
+            return
+        
+        # Add bias term to inputs
+        x_plus = torch.cat([x, torch.ones(batch_size, 1, dtype=x.dtype, device=x.device)], dim=1)  # (batch, n_in+1)
+        
+        # Initialize coefficient matrix for all rules
+        coeff_all = torch.zeros(n_rules, d_out, n_in + 1, dtype=x.dtype, device=x.device)
+        
+        try:
+            # Solve weighted least squares for each rule separately
+            for rule_idx in range(n_rules):
+                # Get weights for this rule across all samples
+                w = weights[:, rule_idx]  # (batch,)
+                
+                # Filter out very small weights to avoid numerical issues
+                # Only use samples where weight > threshold
+                weight_threshold = 1e-8
+                valid_mask = w > weight_threshold
+                n_valid = valid_mask.sum().item()
+                
+                # Need at least n_in+1 samples to solve the system
+                if n_valid < n_in + 1:
+                    # Not enough valid samples, skip this rule
+                    continue
+                
+                # Get valid samples
+                w_valid = w[valid_mask]
+                x_valid = x_plus[valid_mask]  # (n_valid, n_in+1)
+                y_valid = y_actual[valid_mask]  # (n_valid, d_out)
+                
+                # Normalize weights to [0, 1]
+                w_norm = w_valid / (w_valid.max() + 1e-12)
+                
+                # Use sqrt of weights for numerical stability
+                sqrt_w = torch.sqrt(w_norm)  # (n_valid,)
+                
+                # Scale inputs and outputs by sqrt(weights)
+                weighted_x = x_valid * sqrt_w.unsqueeze(1)  # (n_valid, n_in+1)
+                weighted_y = y_valid * sqrt_w.unsqueeze(1)  # (n_valid, d_out)
+                
+                # Check for NaN/Inf after weighting
+                if torch.isnan(weighted_x).any() or torch.isinf(weighted_x).any():
+                    print(f'Rule {rule_idx}: weighted_x contains NaN/Inf')
+                    continue
+                if torch.isnan(weighted_y).any() or torch.isinf(weighted_y).any():
+                    print(f'Rule {rule_idx}: weighted_y contains NaN/Inf')
+                    continue
+                
+                try:
+                    # Solve using normal equations for better numerical stability
+                    # X^T X coeff = X^T y
+                    XtX = weighted_x.t() @ weighted_x  # (n_in+1, n_in+1)
+                    Xty = weighted_x.t() @ weighted_y  # (n_in+1, d_out)
+                    
+                    # Add ridge regularization for stability
+                    ridge_lambda = 1e-6 * torch.trace(XtX) / (n_in + 1)
+                    XtX_ridge = XtX + ridge_lambda * torch.eye(n_in + 1, dtype=XtX.dtype, device=XtX.device)
+                    
+                    # Solve normal equations
+                    coeff_rule = torch.linalg.solve(XtX_ridge, Xty)  # (n_in+1, d_out)
+                    coeff_all[rule_idx] = coeff_rule.t()  # Transpose to (d_out, n_in+1)
+                    
+                except (RuntimeError, torch.linalg.LinAlgError) as solve_err:
+                    # Normal equations failed, try direct lstsq
+                    try:
+                        solution = torch.linalg.lstsq(weighted_x.to(torch.float64), weighted_y.to(torch.float64), rcond=1e-6).solution
+                        coeff_all[rule_idx] = solution.t().to(weighted_x.dtype)
+                    except RuntimeError as lstsq_err:
+                        # lstsq also failed, try pseudoinverse with higher tolerance
+                        try:
+                            # Use float64 for better numerical precision
+                            pinv_matrix = torch.linalg.pinv(weighted_x.to(torch.float64), rcond=1e-5)
+                            sol = (pinv_matrix @ weighted_y.to(torch.float64)).to(weighted_x.dtype)
+                            coeff_all[rule_idx] = sol.t()
+                        except Exception as pinv_err:
+                            # All methods failed, keep zero coefficients
+                            print(f'Rule {rule_idx}: All solving methods failed')
+                            pass
+                    
+        except Exception as e:
+            print('Internal error in fit_coeff:', e)
+            import traceback
+            traceback.print_exc()
+            return
+        
+        # Set coefficient - shape should be (d_rule, d_out, d_in+1)
+        self.coeff = coeff_all
 
     def forward(self, x):
         x_plus = torch.cat([x, torch.ones(x.shape[0], 1).to(x.device)], dim=1)

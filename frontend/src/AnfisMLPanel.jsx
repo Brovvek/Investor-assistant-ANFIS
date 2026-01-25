@@ -34,6 +34,7 @@ const AnfisMLPanel = ({ ticker, config }) => {
   const [saveNotes, setSaveNotes] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const [legendExpanded, setLegendExpanded] = useState(false);
 
   useEffect(() => { fetchHistory(); }, []);
 
@@ -240,7 +241,58 @@ const AnfisMLPanel = ({ ticker, config }) => {
 
   return (
     <div className="p-sm">
-      <div className="info-box"><strong>Wskazówka:</strong> Wybierz <strong>"% Zmiana Ceny"</strong>. Direction Accuracy &gt; 55% = użyteczny model.</div>
+      <div className="legend-section">
+        <div className="legend-header" onClick={() => setLegendExpanded(!legendExpanded)}>
+          <span className="legend-title">📚 Legenda Metryk i Parametrów</span>
+          <span className={`legend-icon ${legendExpanded ? 'expanded' : ''}`}>▼</span>
+        </div>
+        {legendExpanded && (
+          <div className="legend-content">
+            <div className="legend-grid">
+              <div className="legend-item">
+                <div className="legend-item-title">🎯 Celność Kierunku (Direction Accuracy)</div>
+                <div className="legend-item-desc">Procent poprawnych prognoz kierunku ruchu ceny (wzrost/spadek). <span className="text-green">Powyżej 55%</span> oznacza użyteczny model. <span className="text-orange">Powyżej 50%</span> jest marginalne.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">📉 RMSE (Root Mean Square Error)</div>
+                <div className="legend-item-desc">Średni błąd kwadratowy predykcji (w jednostkach ceny). Niższe wartości są lepsze. <span className="text-green">&lt;0.05</span> = doskonały, <span className="text-yellow">&lt;0.1</span> = dobry.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">📊 MAPE (Mean Absolute Percentage Error)</div>
+                <div className="legend-item-desc">Średni błąd procentowy predykcji. <span className="text-green">&lt;5%</span> = doskonały, <span className="text-yellow">&lt;10%</span> = dobry, <span className="text-orange">&gt;10%</span> = słaby.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">📈 R² (Coefficient of Determination)</div>
+                <div className="legend-item-desc">Udział wariancji wyjaśnionej przez model (0-1). <span className="text-green">&gt;0.2</span> = użyteczny, <span className="text-yellow">&gt;0.1</span> = słaby. Im wyżej, tym lepiej.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">🔗 Korelacja (Correlation)</div>
+                <div className="legend-item-desc">Pearson correlation między prognozą a rzeczywistymi wartościami (-1 do 1). <span className="text-green">&gt;0.5</span> = silna, <span className="text-yellow">&gt;0.3</span> = słaba.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">🔀 Train/Test</div>
+                <div className="legend-item-desc">Rozmiar zbiorów treningowego i testowego (liczba próbek). Większy zbiór treningowy = lepsze dopasowanie, ale może być overfitting.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">⚙️ Epoki</div>
+                <div className="legend-item-desc">Liczba przejść przez całą próbkę treningową. Więcej epok = lepsze dopasowanie, ale wolniej i ryzyko overfittingu.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">🌊 Liczba MF (Membership Functions)</div>
+                <div className="legend-item-desc">Liczba funkcji przynależności w każdej zmiennej ANFIS. Więcej = bardziej elastyczny model, ale bardziej złożony.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">🎨 Typ MF</div>
+                <div className="legend-item-desc"><span className="text-blue">Gaussowska</span> = gładka, <span className="text-blue">Dzwonowa</span> = asymetryczna, <span className="text-blue">Trójkątna</span> = ostra. Zwykle Gaussowska daje najlepsze wyniki.</div>
+              </div>
+              <div className="legend-item">
+                <div className="legend-item-title">⚡ Optymalizator</div>
+                <div className="legend-item-desc"><span className="text-blue">Adam</span> = domyślny, najszybszy; <span className="text-blue">AdamW</span> = z regularyzacją; <span className="text-blue">SGD</span> = wolny ale niezawodny.</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       
       <div className="panel-dark grid-auto mb-lg">
         {[['Typ Predykcji', predictionType, setPredictionType, [['returns','% Zmiana'],['log_returns','Log Returns'],['direction','Kierunek'],['price','Surowa Cena']]],
@@ -274,7 +326,7 @@ const AnfisMLPanel = ({ ticker, config }) => {
           {isTraining ? `Trenuję... ${progress}%` : 'Rozpocznij Uczenie ANFIS'}
         </button>
         {!canTrain && <span className="text-red">Wybierz min. 1 wskaźnik</span>}
-        {isTraining && liveMetrics && <div className="info-box info-box-compact">Epoka: {currentEpoch}/{epochs} | RMSE: {fmt(liveMetrics.val_rmse, 4)} | Dir: {fmt(liveMetrics.direction_acc, 1)}%</div>}
+        {isTraining && liveMetrics && <div className="info-box info-box-compact">Epoka: <span className="text-blue">{currentEpoch}/{epochs}</span> | RMSE: <span className="text-orange">{fmt(liveMetrics.val_rmse, 4)}</span> | Dir: <span className={`text-${liveMetrics.direction_acc > 55 ? 'green' : liveMetrics.direction_acc > 50 ? 'yellow' : 'red'}`}>{fmt(liveMetrics.direction_acc, 1)}%</span></div>}
       </div>
 
       {isTraining && <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress}%` }} /></div>}
@@ -284,19 +336,32 @@ const AnfisMLPanel = ({ ticker, config }) => {
         <div>
           <div className="stats-grid-sm mb-lg">
             {[['Celność Kierunku', 'direction_accuracy', 50, v => v > 55],['RMSE', 'rmse', 0],['MAPE', 'mape', 0],['R²', 'r_squared', 0, v => v > 0.2],['Korelacja', 'correlation', 0],['Train/Test', null]
-            ].map(([label, key, fb, hl]) => (
-              <div key={label} className={`stat-box ${hl && hl(getMetric(key, fb)) ? 'highlight' : ''}`}>
-                <div className="stat-label">{label}</div>
-                <div className={`stat-val ${hl && hl(getMetric(key, fb)) ? 'green' : ''}`}>
-                  {key ? (key === 'r_squared' || key === 'correlation' ? fmt(getMetric(key, fb) * 100, 1) : fmt(getMetric(key, fb), key === 'rmse' ? 4 : 1)) + (key !== 'rmse' ? '%' : '') : `${getMetric('train_samples', '?')} / ${getMetric('test_samples', '?')}`}
+            ].map(([label, key, fb, hl]) => {
+              const value = getMetric(key, fb);
+              const getColorClass = (k, v) => {
+                if (!k) return '';
+                if (k === 'direction_accuracy') return v > 55 ? 'green' : v > 50 ? 'yellow' : 'red';
+                if (k === 'rmse') return v < 0.05 ? 'green' : v < 0.1 ? 'yellow' : 'orange';
+                if (k === 'mape') return v < 5 ? 'green' : v < 10 ? 'yellow' : 'orange';
+                if (k === 'r_squared') return v * 100 > 20 ? 'green' : v * 100 > 10 ? 'yellow' : 'red';
+                if (k === 'correlation') return v * 100 > 50 ? 'green' : v * 100 > 30 ? 'yellow' : 'orange';
+                return '';
+              };
+              const colorClass = getColorClass(key, value);
+              return (
+                <div key={label} className={`stat-box ${hl && hl(value) ? 'highlight' : ''}`}>
+                  <div className="stat-label">{label}</div>
+                  <div className={`stat-val text-${colorClass}`}>
+                    {key ? (key === 'r_squared' || key === 'correlation' ? fmt(value * 100, 1) : fmt(value, key === 'rmse' ? 4 : 1)) + (key !== 'rmse' ? '%' : '') : `${getMetric('train_samples', '?')} / ${getMetric('test_samples', '?')}`}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="panel-dark mb-lg">
             <div className="flex-row flex-wrap gap-lg">
-              <span className="font-bold">Zapisz:</span>
+              <span className="font-bold text-primary">Zapisz:</span>
               <input type="text" placeholder="Notatki..." value={saveNotes} onChange={e => setSaveNotes(e.target.value)} className="input-full input-flex" />
               <button onClick={saveResults} className="btn-success">Zapisz do CSV</button>
             </div>

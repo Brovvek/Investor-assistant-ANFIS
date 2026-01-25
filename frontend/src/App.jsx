@@ -67,7 +67,7 @@ function App() {
       </div>
 
       {/* 2. PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
-      <CollapsibleSection title="📊 Mapa Korelacji (Data Science)" defaultOpen={true}>
+      <CollapsibleSection title="📊 Mapa Korelacji (Data Science)" defaultOpen={false}>
         <CorrelationPanel ticker={ticker} />
       </CollapsibleSection>
 
