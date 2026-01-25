@@ -1,19 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import './App.css';
 
-// ========== BEZPIECZNE FUNKCJE POMOCNICZE ==========
-
-// Bezpieczne formatowanie liczby
 const fmt = (value, decimals = 2) => {
   if (value === undefined || value === null || isNaN(value)) return '—';
   return Number(value).toFixed(decimals);
 };
 
-// ========== KOMPONENT ==========
-
 const AnfisMLPanel = ({ ticker, config }) => {
-  // Parametry treningu
   const [epochs, setEpochs] = useState(100);
   const [numMfs, setNumMfs] = useState(3);
   const [batchSize, setBatchSize] = useState(64);
@@ -25,501 +19,334 @@ const AnfisMLPanel = ({ ticker, config }) => {
   const [predictionType, setPredictionType] = useState('returns');
   const [scalerType, setScalerType] = useState('robust');
   const [earlyStoppingPatience, setEarlyStoppingPatience] = useState(20);
-  const [trainingDays, setTrainingDays] = useState(0); // 0 = wszystkie dane
+  const [trainingDays, setTrainingDays] = useState(0);
   
-  // Stan treningu
   const [isTraining, setIsTraining] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentEpoch, setCurrentEpoch] = useState(0);
   const [liveMetrics, setLiveMetrics] = useState(null);
-  
-  // Wyniki
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
-  const [rawResponse, setRawResponse] = useState(''); // DEBUG
-  
-  // Aktywna zakładka
+  const [rawResponse, setRawResponse] = useState('');
   const [activeTab, setActiveTab] = useState('predictions');
+  const [trainingHistory, setTrainingHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [saveNotes, setSaveNotes] = useState('');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
-  // ========== FUNKCJA TRENINGU ==========
-  
+  useEffect(() => { fetchHistory(); }, []);
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/anfis_ml/get_history');
+      const data = await response.json();
+      setTrainingHistory(data.history || []);
+      setSelectedIds(new Set());
+      setExpandedIds(new Set());
+    } catch (err) {
+      setTrainingHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const toggleSelectRecord = (id, e) => {
+    if (e) e.stopPropagation();
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(selectedIds.size === trainingHistory.length ? new Set() : new Set(trainingHistory.map(r => r.id)));
+  };
+
+  const toggleExpandRecord = (id) => {
+    setExpandedIds(prev => {
+      const newSet = new Set(prev);
+      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const toggleExpandAll = () => {
+    setExpandedIds(expandedIds.size === trainingHistory.length ? new Set() : new Set(trainingHistory.map(r => r.id)));
+  };
+
+  const deleteSelected = async () => {
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [];
+    if (!window.confirm(ids.length > 0 ? `Usunąć ${ids.length} rekordów?` : 'Usunąć WSZYSTKIE rekordy?')) return;
+    try {
+      await fetch('http://127.0.0.1:5000/api/anfis_ml/delete_history', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
+      });
+      fetchHistory();
+    } catch (err) { alert('Błąd: ' + err.message); }
+  };
+
+  const exportSelected = async () => {
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : [];
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/anfis_ml/export_selected', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `anfis_history_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) { alert('Błąd: ' + err.message); }
+  };
+
+  const saveResults = async () => {
+    if (!results?.metrics) return alert('Brak wyników');
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/anfis_ml/save_results', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker, prediction_type: predictionType, epochs: parseInt(epochs),
+          num_mfs: parseInt(numMfs), mf_type: mfType, optimizer,
+          learning_rate: parseFloat(learningRate), batch_size: parseInt(batchSize),
+          lookahead: parseInt(lookahead), scaler_type: scalerType, hybrid,
+          training_days: parseInt(trainingDays) || 0,
+          ...results.metrics,
+          features: Object.keys(config || {}).filter(k => config[k]?.enabled).join(', '),
+          notes: saveNotes
+        })
+      });
+      const result = await response.json();
+      if (result.success) { alert('Zapisano!'); setSaveNotes(''); fetchHistory(); }
+    } catch (err) { alert('Błąd: ' + err.message); }
+  };
+
   const startTraining = async () => {
-    setIsTraining(true);
-    setProgress(0);
-    setCurrentEpoch(0);
-    setResults(null);
-    setError('');
-    setLiveMetrics(null);
-    setRawResponse('');
-
+    setIsTraining(true); setProgress(0); setResults(null); setError('');
     try {
       const response = await fetch('http://127.0.0.1:5000/api/anfis_ml/train_stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ticker,
-          config,
-          epochs: parseInt(epochs),
-          num_mfs: parseInt(numMfs),
-          batch_size: parseInt(batchSize),
-          learning_rate: parseFloat(learningRate),
-          mf_type: mfType,
-          hybrid,
-          optimizer,
-          lookahead: parseInt(lookahead),
-          prediction_type: predictionType,
-          scaler_type: scalerType,
+          ticker, config, epochs: parseInt(epochs), num_mfs: parseInt(numMfs),
+          batch_size: parseInt(batchSize), learning_rate: parseFloat(learningRate),
+          mf_type: mfType, hybrid, optimizer, lookahead: parseInt(lookahead),
+          prediction_type: predictionType, scaler_type: scalerType,
           early_stopping_patience: parseInt(earlyStoppingPatience),
           training_days: parseInt(trainingDays) || 0
         })
       });
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let lastData = null;
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
-
         for (const line of lines) {
           if (line.trim()) {
             try {
               const data = JSON.parse(line);
-              lastData = data;
-              
               if (data.status === 'training') {
                 setProgress(data.progress || 0);
                 setCurrentEpoch(data.epoch || 0);
-                setLiveMetrics({
-                  val_rmse: data.val_rmse,
-                  val_mape: data.val_mape,
-                  direction_acc: data.direction_acc
-                });
+                setLiveMetrics({ val_rmse: data.val_rmse, direction_acc: data.direction_acc });
               } else if (data.status === 'done') {
-                console.log('✅ Training complete:', data);
                 setRawResponse(JSON.stringify(data, null, 2).slice(0, 2000));
-                setResults(data);
-                setProgress(100);
-              } else if (data.status === 'error') {
-                setError(data.message || 'Unknown error');
-              }
-            } catch (e) {
-              console.error('JSON parse error:', e, 'Line:', line.slice(0, 200));
-            }
+                setResults(data); setProgress(100);
+              } else if (data.status === 'error') setError(data.message);
+            } catch (e) {}
           }
         }
       }
-      
-      // Jeśli nie otrzymano "done", ale mamy dane, użyj ich
-      if (!results && lastData && lastData.status !== 'error') {
-        console.log('Using last received data:', lastData);
-        setResults(lastData);
-      }
-      
-    } catch (err) {
-      console.error('Training error:', err);
-      setError(err.message || 'Błąd połączenia z serwerem');
-    } finally {
-      setIsTraining(false);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setIsTraining(false); }
   };
 
-  // ========== SPRAWDZENIE KONFIGURACJI ==========
-  
-  const activeFeatures = Object.entries(config || {}).filter(([k, v]) => v && v.enabled);
-  const canTrain = activeFeatures.length >= 1;
-
-  // ========== POMOCNICZE GETTERY ==========
-  
-  const getMetric = (key, fallback = 0) => {
-    if (!results || !results.metrics) return fallback;
-    const m = results.metrics;
-    if (key === 'rmse') return m.rmse ?? m.test_rmse ?? fallback;
-    if (key === 'mape') return m.mape ?? m.test_mape ?? fallback;
-    return m[key] ?? fallback;
-  };
-
+  const canTrain = Object.values(config || {}).some(v => v?.enabled);
+  const getMetric = (key, fb = 0) => results?.metrics?.[key] ?? results?.metrics?.[`test_${key}`] ?? fb;
   const getPredictions = () => results?.predictions || { dates: [], actual: [], predicted: [] };
-  const getHistory = () => results?.training_history || { epochs: [], train_loss: [], val_loss: [] };
+  const getTrainHistory = () => results?.training_history || { epochs: [], train_loss: [], val_loss: [] };
   const getMFs = () => results?.membership_functions || {};
   const getRules = () => results?.rules || [];
   const getImportance = () => results?.feature_importance || {};
 
-  // ========== RENDER ==========
+  const getAccuracyClass = (acc) => acc > 55 ? 'green' : acc > 50 ? '' : 'red';
+
+  const HistoryRecord = ({ row }) => {
+    const isExpanded = expandedIds.has(row.id);
+    const isSelected = selectedIds.has(row.id);
+    const accClass = getAccuracyClass(row.direction_accuracy || 0);
+    
+    return (
+      <div className={`history-record ${isSelected ? 'selected' : ''}`}>
+        <div className={`history-record-header ${isExpanded ? 'expanded' : ''}`} onClick={() => toggleExpandRecord(row.id)}>
+          <div onClick={e => e.stopPropagation()} className="mr-md">
+            <input type="checkbox" checked={isSelected} onChange={e => toggleSelectRecord(row.id, e)} />
+          </div>
+          <span className={`expand-icon ${isExpanded ? 'expanded' : ''}`}>▶</span>
+          <span className="history-record-id">{row.id || '—'}</span>
+          <span className="history-record-ticker">{row.ticker || '—'}</span>
+          <span className="history-record-date">{row.timestamp?.slice(0, 16) || '—'}</span>
+          <span className={`history-record-accuracy text-${accClass || 'primary'}`}>{fmt(row.direction_accuracy, 1)}%</span>
+          <span className="history-record-type">{row.prediction_type || '—'}</span>
+          <span className="history-record-notes">{row.notes || ''}</span>
+        </div>
+        {isExpanded && (
+          <div className="history-record-content">
+            <div className="history-section">
+              <h4 className="history-section-title">📊 Metryki</h4>
+              <div className="grid-metrics">
+                {[['Celność', row.direction_accuracy, accClass], ['RMSE', row.rmse, 'blue'], 
+                  ['MAPE', row.mape, 'orange'], ['R²', (row.r_squared||0)*100, 'green-alt'],
+                  ['Korelacja', (row.correlation||0)*100, 'purple'], ['Win Rate', row.win_rate, 'yellow']
+                ].map(([label, val, colorClass]) => (
+                  <div key={label} className="stat-card">
+                    <div className="stat-card-label">{label}</div>
+                    <div className={`stat-card-value ${colorClass}`}>{fmt(val, label === 'RMSE' ? 4 : 2)}{label !== 'RMSE' ? '%' : ''}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="history-section">
+              <h4 className="history-section-title">⚙️ Parametry</h4>
+              <div className="grid-params">
+                {[['Typ', row.prediction_type], ['Epoki', row.epochs], ['MF', row.num_mfs], ['Typ MF', row.mf_type],
+                  ['Optimizer', row.optimizer], ['LR', row.learning_rate], ['Batch', row.batch_size], ['Horyzont', row.lookahead],
+                  ['Scaler', row.scaler_type], ['Hybrid', row.hybrid ? 'Tak' : 'Nie'], ['Dni', row.training_days || 'Wszystkie'], ['Reguły', row.num_rules]
+                ].map(([k, v]) => (
+                  <div key={k} className="param-row"><span className="param-key">{k}:</span><span className="param-value">{v ?? '—'}</span></div>
+                ))}
+              </div>
+            </div>
+            <div className="history-section">
+              <h4 className="history-section-title">🔧 Cechy</h4>
+              <div className="info-box-features">{row.features || 'Brak'}</div>
+            </div>
+            {row.notes && <div className="history-section">
+              <h4 className="history-section-title">📝 Notatki</h4>
+              <div className="info-box-features italic">{row.notes}</div>
+            </div>}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ padding: '10px' }}>
+    <div className="p-sm">
+      <div className="info-box"><strong>Wskazówka:</strong> Wybierz <strong>"% Zmiana Ceny"</strong>. Direction Accuracy &gt; 55% = użyteczny model.</div>
       
-      {/* INFO BOX */}
-      <div style={{
-        background: 'rgba(41, 98, 255, 0.1)',
-        border: '1px solid #2962ff',
-        borderRadius: '8px',
-        padding: '12px',
-        marginBottom: '15px',
-        fontSize: '0.85em'
-      }}>
-        <strong>💡 Wskazówka:</strong> Wybierz <strong>"% Zmiana Ceny"</strong> jako typ predykcji.
-        Direction Accuracy &gt; 55% = użyteczny model.
-      </div>
-
-      {/* PARAMETRY */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
-        gap: '10px',
-        marginBottom: '20px',
-        padding: '15px',
-        background: '#1a1d26',
-        borderRadius: '8px',
-        border: '1px solid #363a45'
-      }}>
-        <div>
-          <label style={labelStyle}>Typ Predykcji ⭐</label>
-          <select value={predictionType} onChange={e => setPredictionType(e.target.value)} style={inputStyle}>
-            <option value="returns">% Zmiana Ceny</option>
-            <option value="log_returns">Log Returns</option>
-            <option value="direction">Kierunek (0/1)</option>
-            <option value="price">Surowa Cena</option>
-          </select>
-        </div>
-        
-        <div>
-          <label style={labelStyle}>Epoki</label>
-          <input type="number" value={epochs} onChange={e => setEpochs(e.target.value)} min="10" max="500" style={inputStyle} />
-        </div>
-        
-        <div>
-          <label style={labelStyle}>MF Count</label>
-          <input type="number" value={numMfs} onChange={e => setNumMfs(e.target.value)} min="2" max="7" style={inputStyle} />
-        </div>
-        
-        <div>
-          <label style={labelStyle}>MF Type</label>
-          <select value={mfType} onChange={e => setMfType(e.target.value)} style={inputStyle}>
-            <option value="gauss">Gaussian</option>
-            <option value="bell">Bell</option>
-            <option value="tri">Triangular</option>
-          </select>
-        </div>
-        
-        <div>
-          <label style={labelStyle}>Optimizer</label>
-          <select value={optimizer} onChange={e => setOptimizer(e.target.value)} style={inputStyle}>
-            <option value="adam">Adam</option>
-            <option value="adamw">AdamW</option>
-            <option value="sgd">SGD</option>
-          </select>
-        </div>
-        
-        <div>
-          <label style={labelStyle}>Learning Rate</label>
-          <input type="number" value={learningRate} onChange={e => setLearningRate(e.target.value)} step="0.001" style={inputStyle} />
-        </div>
-        
-        <div>
-          <label style={labelStyle}>Batch Size</label>
-          <select value={batchSize} onChange={e => setBatchSize(e.target.value)} style={inputStyle}>
-            <option value="32">32</option>
-            <option value="64">64</option>
-            <option value="128">128</option>
-          </select>
-        </div>
-        
-        <div>
-          <label style={labelStyle}>Lookahead (dni)</label>
-          <input type="number" value={lookahead} onChange={e => setLookahead(e.target.value)} min="1" max="30" style={inputStyle} />
-        </div>
-
-        <div>
-          <label style={labelStyle}>Scaler</label>
-          <select value={scalerType} onChange={e => setScalerType(e.target.value)} style={inputStyle}>
-            <option value="robust">Robust</option>
-            <option value="standard">Standard</option>
-            <option value="minmax">MinMax</option>
-          </select>
-        </div>
-
-        <div>
-          <label style={labelStyle}>Early Stop</label>
-          <input type="number" value={earlyStoppingPatience} onChange={e => setEarlyStoppingPatience(e.target.value)} min="5" max="50" style={inputStyle} />
-        </div>
-
-        <div>
-          <label style={labelStyle}>Dni treningowe</label>
-          <select value={trainingDays} onChange={e => setTrainingDays(e.target.value)} style={inputStyle}>
-            <option value="0">Wszystkie dane</option>
-            <option value="252">1 rok (252)</option>
-            <option value="504">2 lata (504)</option>
-            <option value="756">3 lata (756)</option>
-            <option value="1260">5 lat (1260)</option>
-            <option value="2520">10 lat (2520)</option>
-          </select>
-        </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', paddingTop: '20px' }}>
-          <label>
-            <input type="checkbox" checked={hybrid} onChange={e => setHybrid(e.target.checked)} style={{ marginRight: '5px' }} />
-            Hybrid (LSE)
-          </label>
-        </div>
-      </div>
-
-      {/* PRZYCISK STARTU */}
-      <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <button 
-          onClick={startTraining} 
-          disabled={isTraining || !canTrain}
-          style={{ 
-            padding: '12px 30px', 
-            fontSize: '1em',
-            background: canTrain ? 'linear-gradient(135deg, #2962ff 0%, #00c853 100%)' : '#444',
-            border: 'none',
-            borderRadius: '8px',
-            color: 'white',
-            cursor: canTrain && !isTraining ? 'pointer' : 'not-allowed'
-          }}
-        >
-          {isTraining ? `Trenuję... ${progress}%` : '🧠 Rozpocznij Uczenie ANFIS'}
-        </button>
-        
-        {!canTrain && (
-          <span style={{ color: '#ff5252', fontSize: '0.9em' }}>⚠️ Wybierz min. 1 wskaźnik</span>
-        )}
-        
-        {isTraining && liveMetrics && (
-          <div style={{ fontSize: '0.8em', color: '#888', background: 'rgba(41,98,255,0.1)', padding: '8px 12px', borderRadius: '4px' }}>
-            Epoka: {currentEpoch}/{epochs} | RMSE: {fmt(liveMetrics.val_rmse, 4)} | Dir: {fmt(liveMetrics.direction_acc, 1)}%
+      <div className="panel-dark grid-auto mb-lg">
+        {[['Typ Predykcji', predictionType, setPredictionType, [['returns','% Zmiana'],['log_returns','Log Returns'],['direction','Kierunek'],['price','Surowa Cena']]],
+          ['Typ MF', mfType, setMfType, [['gauss','Gaussowska'],['bell','Dzwonowa'],['tri','Trójkątna']]],
+          ['Optymalizator', optimizer, setOptimizer, [['adam','Adam'],['adamw','AdamW'],['sgd','SGD']]],
+          ['Batch Size', batchSize, setBatchSize, [['32','32'],['64','64'],['128','128']]],
+          ['Scaler', scalerType, setScalerType, [['robust','Robust'],['standard','Standard'],['minmax','MinMax']]],
+          ['Dni treningowe', trainingDays, setTrainingDays, [['0','Wszystkie'],['252','1 rok'],['504','2 lata'],['1260','5 lat']]]
+        ].map(([label, val, setter, opts]) => (
+          <div key={label}><label className="label">{label}</label>
+            <select value={val} onChange={e => setter(e.target.value)} className="input-full">
+              {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
           </div>
-        )}
+        ))}
+        {[['Epoki', epochs, setEpochs, 10, 500], ['Liczba MF', numMfs, setNumMfs, 2, 7], 
+          ['Learning Rate', learningRate, setLearningRate, 0.001, 0.1], ['Horyzont', lookahead, setLookahead, 1, 30],
+          ['Early Stop', earlyStoppingPatience, setEarlyStoppingPatience, 5, 50]
+        ].map(([label, val, setter, min, max]) => (
+          <div key={label}><label className="label">{label}</label>
+            <input type="number" value={val} onChange={e => setter(e.target.value)} min={min} max={max} step={label === 'Learning Rate' ? 0.001 : 1} className="input-full" />
+          </div>
+        ))}
+        <div className="flex-row pt-lg">
+          <label><input type="checkbox" checked={hybrid} onChange={e => setHybrid(e.target.checked)} className="mr-sm" />Hybrid (LSE)</label>
+        </div>
       </div>
 
-      {/* PASEK POSTĘPU */}
-      {isTraining && (
-        <div style={{ height: '6px', background: '#2a2e39', borderRadius: '3px', marginBottom: '20px', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #2962ff, #00c853)', transition: 'width 0.3s' }} />
-        </div>
-      )}
+      <div className="flex-row flex-wrap gap-xl mb-lg">
+        <button onClick={startTraining} disabled={isTraining || !canTrain} className={`btn-lg ${canTrain ? 'btn-gradient' : ''}`}>
+          {isTraining ? `Trenuję... ${progress}%` : 'Rozpocznij Uczenie ANFIS'}
+        </button>
+        {!canTrain && <span className="text-red">Wybierz min. 1 wskaźnik</span>}
+        {isTraining && liveMetrics && <div className="info-box info-box-compact">Epoka: {currentEpoch}/{epochs} | RMSE: {fmt(liveMetrics.val_rmse, 4)} | Dir: {fmt(liveMetrics.direction_acc, 1)}%</div>}
+      </div>
 
-      {/* BŁĄD */}
-      {error && (
-        <div style={{ background: 'rgba(255,82,82,0.1)', border: '1px solid #ff5252', borderRadius: '8px', padding: '15px', marginBottom: '20px', color: '#ff5252' }}>
-          ❌ {error}
-        </div>
-      )}
+      {isTraining && <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress}%` }} /></div>}
+      {error && <div className="alert-error">{error}</div>}
 
-      {/* ========== WYNIKI ========== */}
       {results && (
         <div>
-          {/* METRYKI - BEZPIECZNE */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginBottom: '20px' }}>
-            
-            <div style={statBox(getMetric('direction_accuracy', 50) > 55)}>
-              <div style={statLabel}>Direction Accuracy ⭐</div>
-              <div style={{...statVal, color: getMetric('direction_accuracy', 50) > 55 ? '#00e676' : '#d1d4dc'}}>
-                {fmt(getMetric('direction_accuracy', 50), 1)}%
-              </div>
-            </div>
-            
-            <div style={statBox()}>
-              <div style={statLabel}>RMSE</div>
-              <div style={{...statVal, color: '#89b4fa'}}>{fmt(getMetric('rmse'), 4)}</div>
-            </div>
-            
-            <div style={statBox()}>
-              <div style={statLabel}>MAPE</div>
-              <div style={statVal}>{fmt(getMetric('mape'), 2)}%</div>
-            </div>
-            
-            <div style={statBox(getMetric('r_squared', 0) > 0.2)}>
-              <div style={statLabel}>R²</div>
-              <div style={{...statVal, color: getMetric('r_squared', 0) > 0.2 ? '#00e676' : '#d1d4dc'}}>
-                {fmt(getMetric('r_squared', 0) * 100, 1)}%
-              </div>
-            </div>
-            
-            <div style={statBox()}>
-              <div style={statLabel}>Correlation</div>
-              <div style={statVal}>{fmt(getMetric('correlation', 0) * 100, 1)}%</div>
-            </div>
-            
-            <div style={statBox()}>
-              <div style={statLabel}>Train / Test</div>
-              <div style={{...statVal, color: '#cba6f7', fontSize: '1.2em'}}>
-                {getMetric('train_samples', '?')} / {getMetric('test_samples', '?')}
-              </div>
-            </div>
-
-            {getMetric('win_rate') > 0 && (
-              <div style={statBox(getMetric('win_rate', 50) > 50)}>
-                <div style={statLabel}>Win Rate</div>
-                <div style={{...statVal, color: getMetric('win_rate', 50) > 50 ? '#00e676' : '#ff5252'}}>
-                  {fmt(getMetric('win_rate'), 1)}%
+          <div className="stats-grid-sm mb-lg">
+            {[['Celność Kierunku', 'direction_accuracy', 50, v => v > 55],['RMSE', 'rmse', 0],['MAPE', 'mape', 0],['R²', 'r_squared', 0, v => v > 0.2],['Korelacja', 'correlation', 0],['Train/Test', null]
+            ].map(([label, key, fb, hl]) => (
+              <div key={label} className={`stat-box ${hl && hl(getMetric(key, fb)) ? 'highlight' : ''}`}>
+                <div className="stat-label">{label}</div>
+                <div className={`stat-val ${hl && hl(getMetric(key, fb)) ? 'green' : ''}`}>
+                  {key ? (key === 'r_squared' || key === 'correlation' ? fmt(getMetric(key, fb) * 100, 1) : fmt(getMetric(key, fb), key === 'rmse' ? 4 : 1)) + (key !== 'rmse' ? '%' : '') : `${getMetric('train_samples', '?')} / ${getMetric('test_samples', '?')}`}
                 </div>
               </div>
-            )}
-
-            {getMetric('strategy_sharpe') !== 0 && (
-              <div style={statBox(getMetric('strategy_sharpe', 0) > 1)}>
-                <div style={statLabel}>Sharpe Ratio</div>
-                <div style={{...statVal, color: getMetric('strategy_sharpe', 0) > 1 ? '#00e676' : '#d1d4dc'}}>
-                  {fmt(getMetric('strategy_sharpe'), 2)}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
 
-          {/* ZAKŁADKI */}
-          <div style={{ display: 'flex', gap: '5px', marginBottom: '15px', borderBottom: '1px solid #363a45', paddingBottom: '10px', flexWrap: 'wrap' }}>
-            {['predictions', 'scatter', 'loss', 'mf', 'importance', 'rules', 'debug'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '8px 12px',
-                  background: activeTab === tab ? '#2962ff' : 'transparent',
-                  border: activeTab === tab ? 'none' : '1px solid #363a45',
-                  borderRadius: '4px',
-                  color: activeTab === tab ? '#fff' : '#888',
-                  cursor: 'pointer',
-                  fontSize: '0.8em'
-                }}
-              >
-                {tab === 'predictions' && '📈 Predykcje'}
-                {tab === 'scatter' && '🎯 Scatter'}
-                {tab === 'loss' && '📉 Loss'}
-                {tab === 'mf' && '🔔 MF'}
-                {tab === 'importance' && '⚖️ Ważność'}
-                {tab === 'rules' && '📜 Reguły'}
-                {tab === 'debug' && '🐛 Debug'}
+          <div className="panel-dark mb-lg">
+            <div className="flex-row flex-wrap gap-lg">
+              <span className="font-bold">Zapisz:</span>
+              <input type="text" placeholder="Notatki..." value={saveNotes} onChange={e => setSaveNotes(e.target.value)} className="input-full input-flex" />
+              <button onClick={saveResults} className="btn-success">Zapisz do CSV</button>
+            </div>
+          </div>
+
+          <div className="tabs-container">
+            {['predictions','scatter','loss','mf','importance','rules','debug'].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
+                {{predictions:'Predykcje',scatter:'Scatter',loss:'Loss',mf:'MF',importance:'Ważność',rules:'Reguły',debug:'Debug'}[tab]}
               </button>
             ))}
           </div>
 
-          {/* ZAWARTOŚĆ ZAKŁADEK */}
-          <div style={{ background: '#1e222d', borderRadius: '8px', padding: '15px', border: '1px solid #363a45', minHeight: '350px' }}>
-            
-            {/* PREDYKCJE */}
-            {activeTab === 'predictions' && (
-              getPredictions().dates?.length > 0 ? (
-                <Plot
-                  data={[
-                    { x: getPredictions().dates, y: getPredictions().actual, type: 'scatter', mode: 'lines', name: 'Actual', line: { color: '#2962ff', width: 2 } },
-                    { x: getPredictions().dates, y: getPredictions().predicted, type: 'scatter', mode: 'lines', name: 'Predicted', line: { color: '#00e676', width: 2, dash: 'dot' } },
-                    ...(predictionType !== 'price' ? [{ x: getPredictions().dates, y: getPredictions().dates.map(() => 0), type: 'scatter', mode: 'lines', line: { color: '#666', width: 1, dash: 'dash' }, showlegend: false }] : [])
-                  ]}
-                  layout={{
-                    title: { text: `Predykcja: ${predictionType} (${lookahead}d)`, font: { color: '#d1d4dc', size: 14 } },
-                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-                    font: { color: '#d1d4dc' },
-                    margin: { t: 40, b: 40, l: 60, r: 20 },
-                    xaxis: { showgrid: false },
-                    yaxis: { gridcolor: '#2a2e39' },
-                    legend: { orientation: 'h', y: 1.1 }
-                  }}
-                  useResizeHandler style={{ width: '100%', height: '380px' }}
-                />
-              ) : <div style={emptyState}>Brak danych predykcji</div>
-            )}
+          <div className="section-box">
+            {activeTab === 'predictions' && (getPredictions().dates?.length > 0 ? (
+              <Plot data={[
+                { x: getPredictions().dates, y: getPredictions().actual, type: 'scatter', mode: 'lines', name: 'Rzeczywiste', line: { color: '#2962ff', width: 2 } },
+                { x: getPredictions().dates, y: getPredictions().predicted, type: 'scatter', mode: 'lines', name: 'Predykcja', line: { color: '#00e676', width: 2, dash: 'dot' } }
+              ]} layout={{ paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 40, l: 60, r: 20 }, xaxis: { showgrid: false }, yaxis: { gridcolor: '#2a2e39' }, legend: { orientation: 'h', y: 1.1 } }} useResizeHandler className="chart-full" />
+            ) : <div className="empty-state">Brak danych</div>)}
 
-            {/* SCATTER */}
-            {activeTab === 'scatter' && (
-              getPredictions().actual?.length > 0 ? (
-                <Plot
-                  data={[
-                    {
-                      x: getPredictions().actual, y: getPredictions().predicted,
-                      type: 'scatter', mode: 'markers', name: 'Points',
-                      marker: { color: getPredictions().actual.map((a, i) => Math.sign(a) === Math.sign(getPredictions().predicted[i]) ? '#00e676' : '#ff5252'), size: 5, opacity: 0.7 }
-                    },
-                    {
-                      x: [Math.min(...getPredictions().actual), Math.max(...getPredictions().actual)],
-                      y: [Math.min(...getPredictions().actual), Math.max(...getPredictions().actual)],
-                      type: 'scatter', mode: 'lines', name: 'Perfect', line: { color: '#888', dash: 'dash' }
-                    }
-                  ]}
-                  layout={{
-                    title: { text: `Actual vs Predicted (R²=${fmt(getMetric('r_squared') * 100, 1)}%)`, font: { color: '#d1d4dc', size: 14 } },
-                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-                    font: { color: '#d1d4dc' },
-                    margin: { t: 40, b: 50, l: 60, r: 20 },
-                    xaxis: { title: 'Actual', gridcolor: '#2a2e39' },
-                    yaxis: { title: 'Predicted', gridcolor: '#2a2e39' }
-                  }}
-                  useResizeHandler style={{ width: '100%', height: '380px' }}
-                />
-              ) : <div style={emptyState}>Brak danych</div>
-            )}
+            {activeTab === 'scatter' && (getPredictions().actual?.length > 0 ? (
+              <Plot data={[
+                { x: getPredictions().actual, y: getPredictions().predicted, type: 'scatter', mode: 'markers', marker: { color: getPredictions().actual.map((a, i) => Math.sign(a) === Math.sign(getPredictions().predicted[i]) ? '#00e676' : '#ff5252'), size: 5 } }
+              ]} layout={{ paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 50, l: 60, r: 20 }, xaxis: { title: 'Rzeczywiste', gridcolor: '#2a2e39' }, yaxis: { title: 'Predykcja', gridcolor: '#2a2e39' } }} useResizeHandler className="chart-full" />
+            ) : <div className="empty-state">Brak danych</div>)}
 
-            {/* LOSS */}
-            {activeTab === 'loss' && (
-              getHistory().epochs?.length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <Plot
-                    data={[
-                      { x: getHistory().epochs, y: getHistory().train_loss, type: 'scatter', mode: 'lines', name: 'Train', line: { color: '#2962ff' } },
-                      { x: getHistory().epochs, y: getHistory().val_loss, type: 'scatter', mode: 'lines', name: 'Val', line: { color: '#ff5252' } }
-                    ]}
-                    layout={{ title: { text: 'Loss', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc', size: 9 }, margin: { t: 35, b: 35, l: 45, r: 10 }, xaxis: { showgrid: false }, yaxis: { gridcolor: '#2a2e39' }, legend: { orientation: 'h', y: 1.15 } }}
-                    style={{ width: '100%', height: '250px' }}
-                  />
-                  <Plot
-                    data={[
-                      { x: getHistory().epochs, y: getHistory().val_direction_acc || getHistory().epochs.map(() => 50), type: 'scatter', mode: 'lines', name: 'DirAcc', line: { color: '#00e676' }, fill: 'tozeroy', fillcolor: 'rgba(0,230,118,0.1)' },
-                      { x: getHistory().epochs, y: getHistory().epochs.map(() => 50), type: 'scatter', mode: 'lines', name: '50%', line: { color: '#666', dash: 'dash' } }
-                    ]}
-                    layout={{ title: { text: 'Direction Accuracy', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc', size: 9 }, margin: { t: 35, b: 35, l: 45, r: 10 }, xaxis: { showgrid: false }, yaxis: { gridcolor: '#2a2e39', range: [40, 70] }, legend: { orientation: 'h', y: 1.15 } }}
-                    style={{ width: '100%', height: '250px' }}
-                  />
-                </div>
-              ) : <div style={emptyState}>Brak historii treningu</div>
-            )}
+            {activeTab === 'loss' && (getTrainHistory().epochs?.length > 0 ? (
+              <div className="grid-charts">
+                <Plot data={[{ x: getTrainHistory().epochs, y: getTrainHistory().train_loss, name: 'Train', line: { color: '#2962ff' } }, { x: getTrainHistory().epochs, y: getTrainHistory().val_loss, name: 'Val', line: { color: '#ff5252' } }]} layout={{ title: { text: 'Loss', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 35, b: 35, l: 45, r: 10 }, legend: { orientation: 'h', y: 1.15 } }} className="chart-md" />
+                <Plot data={[{ x: getTrainHistory().epochs, y: getTrainHistory().val_direction_acc || [], name: 'Celność', line: { color: '#00e676' }, fill: 'tozeroy' }]} layout={{ title: { text: 'Celność', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 35, b: 35, l: 45, r: 10 }, yaxis: { range: [40, 70] } }} className="chart-md" />
+              </div>
+            ) : <div className="empty-state">Brak danych</div>)}
 
-            {/* MF */}
-            {activeTab === 'mf' && (
-              Object.keys(getMFs()).length > 0 ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '10px' }}>
-                  {Object.entries(getMFs()).map(([name, data]) => (
-                    <div key={name} style={{ background: '#1a1d26', borderRadius: '6px', padding: '8px' }}>
-                      <Plot
-                        data={Object.entries(data.mfs || {}).map(([mfName, yVals], idx) => ({
-                          x: data.x || [], y: yVals || [], type: 'scatter', mode: 'lines', name: mfName,
-                          line: { color: ['#2962ff', '#00e676', '#ff5252', '#fab387', '#cba6f7'][idx % 5], width: 2 }
-                        }))}
-                        layout={{ title: { text: name, font: { color: '#d1d4dc', size: 11 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc', size: 8 }, margin: { t: 30, b: 25, l: 35, r: 10 }, xaxis: { showgrid: false }, yaxis: { range: [0, 1.1], gridcolor: '#2a2e39' }, legend: { orientation: 'h', y: -0.2, font: { size: 7 } }, showlegend: true }}
-                        config={{ displayModeBar: false }}
-                        style={{ width: '100%', height: '180px' }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : <div style={emptyState}>Brak danych MF</div>
-            )}
+            {activeTab === 'mf' && (Object.keys(getMFs()).length > 0 ? (
+              <div className="grid-mf">
+                {Object.entries(getMFs()).map(([f, d]) => {
+                  const mfsData = d.mfs && typeof d.mfs === 'object' && !Array.isArray(d.mfs)
+                    ? Object.entries(d.mfs).map(([mfName, yValues]) => ({ x: d.x, y: yValues, name: mfName, type: 'scatter', mode: 'lines' }))
+                    : (d.mfs || []).map((m, i) => ({ x: d.x, y: m.y || m, name: `MF${i+1}`, type: 'scatter', mode: 'lines' }));
+                  return <Plot key={f} data={mfsData} layout={{ title: { text: f, font: { color: '#d1d4dc', size: 11 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#888' }, margin: { t: 30, b: 25, l: 35, r: 10 }, showlegend: true, legend: { font: { size: 9 } }, xaxis: { gridcolor: '#2a2e39' }, yaxis: { gridcolor: '#2a2e39', range: [0, 1.05] } }} className="chart-sm" useResizeHandler />;
+                })}
+              </div>
+            ) : <div className="empty-state">Brak danych MF</div>)}
 
-            {/* IMPORTANCE */}
-            {activeTab === 'importance' && (
-              Object.keys(getImportance()).length > 0 ? (
-                <Plot
-                  data={[{
-                    x: Object.values(getImportance()), y: Object.keys(getImportance()),
-                    type: 'bar', orientation: 'h',
-                    marker: { color: Object.values(getImportance()).map(v => `rgba(41,98,255,${0.3 + v / 100 * 0.7})`) },
-                    text: Object.values(getImportance()).map(v => `${fmt(v, 1)}%`), textposition: 'outside'
-                  }]}
-                  layout={{ title: { text: 'Feature Importance', font: { color: '#d1d4dc', size: 14 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 40, l: 140, r: 50 }, xaxis: { title: '%', gridcolor: '#2a2e39' } }}
-                  style={{ width: '100%', height: Math.max(280, Object.keys(getImportance()).length * 35) + 'px' }}
-                />
-              ) : <div style={emptyState}>Brak danych ważności</div>
-            )}
+            {activeTab === 'importance' && (Object.keys(getImportance()).length > 0 ? (
+              <Plot data={[{ x: Object.values(getImportance()), y: Object.keys(getImportance()), type: 'bar', orientation: 'h', marker: { color: '#2962ff' } }]} layout={{ paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 40, b: 40, l: 150, r: 20 } }} useResizeHandler className="chart-full" />
+            ) : <div className="empty-state">Brak danych</div>)}
 
-            {/* RULES */}
-            {activeTab === 'rules' && (
+                        {activeTab === 'rules' && (
               getRules().length > 0 ? (
                 <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8em' }}>
@@ -542,43 +369,34 @@ const AnfisMLPanel = ({ ticker, config }) => {
               ) : <div style={emptyState}>Brak reguł</div>
             )}
 
-            {/* DEBUG */}
-            {activeTab === 'debug' && (
-              <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
-                <h4 style={{ color: '#d1d4dc', marginTop: 0 }}>🐛 Debug Info</h4>
-                <p style={{ color: '#888', fontSize: '0.85em' }}>Status: <strong>{results?.status || 'unknown'}</strong></p>
-                <p style={{ color: '#888', fontSize: '0.85em' }}>Metrics keys: <strong>{Object.keys(results?.metrics || {}).join(', ') || 'none'}</strong></p>
-                <p style={{ color: '#888', fontSize: '0.85em' }}>Predictions count: <strong>{getPredictions().dates?.length || 0}</strong></p>
-                <p style={{ color: '#888', fontSize: '0.85em' }}>History epochs: <strong>{getHistory().epochs?.length || 0}</strong></p>
-                <pre style={{ background: '#0d0d0d', padding: '10px', borderRadius: '4px', fontSize: '0.7em', color: '#888', overflow: 'auto', maxHeight: '200px' }}>
-                  {rawResponse || JSON.stringify(results, null, 2).slice(0, 3000)}
-                </pre>
-              </div>
-            )}
-          </div>
-
-          {/* MODEL SUMMARY */}
-          <div style={{ marginTop: '15px', padding: '12px', background: '#1a1d26', borderRadius: '8px', border: '1px solid #363a45', fontSize: '0.8em' }}>
-            <strong style={{ color: '#d1d4dc' }}>📊 Model:</strong>{' '}
-            <span style={{ color: '#888' }}>
-              {predictionType} | {mfType} | {optimizer} | 
-              Rules: {results?.model_summary?.num_rules || '?'} | 
-              Features: {(results?.model_summary?.feature_names || []).join(', ') || '?'}
-            </span>
+            {activeTab === 'debug' && <pre className="debug-pre">{rawResponse || 'Brak'}</pre>}
           </div>
         </div>
       )}
+
+      <div className="mt-lg">
+        <div className="flex-between mb-md">
+          <h3 className="text-primary m-0">📜 Historia ({trainingHistory.length})</h3>
+          <div className="flex-row gap-lg">
+            <button onClick={toggleExpandAll} className="btn-secondary btn-pill">{expandedIds.size === trainingHistory.length ? 'Zwiń' : 'Rozwiń'}</button>
+            <button onClick={fetchHistory} className="btn-secondary btn-pill">Odśwież</button>
+            <button onClick={exportSelected} className="btn-secondary btn-pill">Eksport {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}</button>
+            <button onClick={deleteSelected} className="btn-pill btn-danger">Usuń {selectedIds.size > 0 ? `(${selectedIds.size})` : 'Wszystko'}</button>
+          </div>
+        </div>
+        {historyLoading ? <div className="loading-container"><div className="loading-spinner"></div><p className="mt-md">Ładowanie...</p></div> :
+         trainingHistory.length === 0 ? <div className="empty-state panel-dark">Brak zapisanych treningów</div> : (
+          <div>
+            <div className="flex-row gap-md mb-md p-sm select-all-bar">
+              <input type="checkbox" checked={selectedIds.size === trainingHistory.length && trainingHistory.length > 0} onChange={toggleSelectAll} />
+              <span className="label-sm">Zaznacz wszystko ({selectedIds.size}/{trainingHistory.length})</span>
+            </div>
+            {trainingHistory.map((row, i) => <HistoryRecord key={row.id || i} row={row} />)}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
-
-// ========== STYLE ==========
-
-const labelStyle = { fontSize: '0.7em', color: '#888', marginBottom: '3px', display: 'block' };
-const inputStyle = { width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #363a45', background: '#131722', color: '#fff', fontSize: '0.85em' };
-const statBox = (highlight = false) => ({ background: '#2a2e39', padding: '15px', borderRadius: '8px', textAlign: 'center', border: `1px solid ${highlight ? '#00e676' : '#363a45'}` });
-const statLabel = { color: '#888', fontSize: '0.8em', marginBottom: '5px' };
-const statVal = { fontSize: '1.5em', fontWeight: 'bold', color: '#d1d4dc' };
-const emptyState = { textAlign: 'center', padding: '60px 20px', color: '#666' };
 
 export default AnfisMLPanel;

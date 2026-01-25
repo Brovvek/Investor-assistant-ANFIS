@@ -1,10 +1,11 @@
 import React from 'react';
 import Plot from 'react-plotly.js';
+import './App.css';
 
 const MarketChart = ({ data }) => {
-  if (!data) return <div style={{padding: 20}}>Brak danych do wyÅ›wietlenia.</div>;
+  if (!data) return <div className="no-data-message">Brak danych do wyświetlenia.</div>;
 
-  // 1. CENA (OÅ› Lewa - Y1)
+  // 1. CENA (Oś Lewa - Y1)
   const tracePrice = {
     x: data.Date, y: data.Price,
     name: 'Cena Aktywa', type: 'scatter', mode: 'lines',
@@ -12,7 +13,7 @@ const MarketChart = ({ data }) => {
     xaxis: 'x', yaxis: 'y'
   };
 
-  // 2. ANFIS (OÅ› Prawa - Y2 0-100)
+  // 2. ANFIS (Oś Prawa - Y2 0-100)
   const traceAnfis = {
     x: data.Date, y: data.Sentiment_Oscillator,
     name: 'ANFIS (Wynik)', type: 'scatter', mode: 'lines',
@@ -21,9 +22,9 @@ const MarketChart = ({ data }) => {
     xaxis: 'x', yaxis: 'y2'
   };
 
-  // --- WSKAÅ¹NIKI POMOCNICZE (OÅ› Y2 0-100) ---
+  // --- WSKAŹNIKI POMOCNICZE (Oś Y2 0-100) ---
   // Uwaga: Backend teraz zwraca znormalizowane rangi (0-100) w tych polach.
-  // DziÄ™ki temu wszystko pasuje do skali ANFIS.
+  // Dzięki temu wszystko pasuje do skali ANFIS.
   
   const traceRSI = {
     x: data.Date, y: data.RSI,
@@ -34,7 +35,7 @@ const MarketChart = ({ data }) => {
   };
 
   const traceVIX = {
-    x: data.Date, y: data.VIX, // Poprawiono z VIX_Rank na VIX
+    x: data.Date, y: data.VIX,
     name: 'VIX (Rank)', type: 'scatter', mode: 'lines',
     line: { color: '#fab387', width: 1, dash: 'dot' },
     visible: 'legendonly',
@@ -42,7 +43,7 @@ const MarketChart = ({ data }) => {
   };
 
   const traceYield = {
-    x: data.Date, y: data.Yield_Curve, // Poprawiono z Yield_Rank na Yield_Curve
+    x: data.Date, y: data.Yield_Curve,
     name: 'Yield Curve (Rank)', type: 'scatter', mode: 'lines',
     line: { color: '#a6e3a1', width: 1, dash: 'dot' },
     visible: 'legendonly',
@@ -50,7 +51,7 @@ const MarketChart = ({ data }) => {
   };
 
   const traceMACD = {
-    x: data.Date, y: data.MACD, // Poprawiono z MACD_Rank na MACD
+    x: data.Date, y: data.MACD,
     name: 'MACD Hist (Rank)', type: 'scatter', mode: 'lines',
     line: { color: '#89b4fa', width: 1, dash: 'dot' },
     visible: 'legendonly',
@@ -58,8 +59,8 @@ const MarketChart = ({ data }) => {
   };
 
   const traceM2 = {
-    x: data.Date, y: data.M2_Liquidity, // Poprawiono z M2_Rank na M2_Liquidity
-    name: 'M2 PÅ‚ynnoÅ›Ä‡ (Rank)', type: 'scatter', mode: 'lines',
+    x: data.Date, y: data.M2_Liquidity,
+    name: 'M2 Płynność (Rank)', type: 'scatter', mode: 'lines',
     line: { color: '#f9e2af', width: 1, dash: 'dot' },
     visible: 'legendonly',
     xaxis: 'x', yaxis: 'y2'
@@ -73,17 +74,17 @@ const MarketChart = ({ data }) => {
     margin: { t: 30, b: 30, l: 60, r: 50 }, 
     hovermode: 'x unified',
     
-    // OÅ› X (WspÃ³lna)
+    // Oś X (Wspólna)
     xaxis: { anchor: 'y2', showgrid: true, gridcolor: '#2a2e39' },
 
-    // OÅ› Y1 (Cena - GÃ³rne 60%)
+    // Oś Y1 (Cena - Górne 60%)
     yaxis: { 
       domain: [0.45, 1], 
       title: 'Cena', 
       gridcolor: '#2a2e39' 
     },
 
-    // OÅ› Y2 (Oscylatory 0-100 - Dolne 35%)
+    // Oś Y2 (Oscylatory 0-100 - Dolne 35%)
     yaxis2: { 
       domain: [0, 0.35], 
       title: 'Sentyment (0-100)', 
@@ -110,7 +111,7 @@ const MarketChart = ({ data }) => {
       data={[tracePrice, traceAnfis, traceRSI, traceVIX, traceYield, traceMACD, traceM2]}
       layout={layout}
       useResizeHandler={true}
-      style={{ width: "100%", height: "100%" }}
+      className="plot-full-size"
       config={{ responsive: true, displayModeBar: true }}
     />
   );

@@ -16,7 +16,7 @@ const CorrelationPanel = ({ ticker }) => {
       setCorrData(response.data);
     } catch (err) {
       console.error(err);
-      alert("BÅ‚Ä…d analizy korelacji");
+      alert("Błąd analizy korelacji");
     } finally {
       setLoading(false);
     }
@@ -28,10 +28,10 @@ const CorrelationPanel = ({ ticker }) => {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', color: '#888', background: '#1e222d', borderRadius: '8px' }}>
+      <div className="correlation-loading">
         <div className="loading-spinner"></div>
-        <p style={{ marginTop: '15px' }}>â³ InÅ¼ynieria Cech w toku...</p>
-        <p style={{ fontSize: '0.8em' }}>Generowanie setek wskaÅºnikÃ³w i badanie zaleÅ¼noÅ›ci...</p>
+        <p className="correlation-loading-text">⏳ Inżynieria Cech w toku...</p>
+        <p className="correlation-loading-subtext">Generowanie setek wskaźników i badanie zależności...</p>
       </div>
     );
   }
@@ -40,45 +40,44 @@ const CorrelationPanel = ({ ticker }) => {
 
   // --- PRZYGOTOWANIE DANYCH DLA PLOTLY ---
   
-  // OÅ› X: Nazwy WskaÅºnikÃ³w - OGRANICZAMY DO TOP 20
-  // Backend zwraca 50, ale my wyÅ›wietlamy tylko 20 najlepszych dla czytelnoÅ›ci
+  // Oś X: Nazwy Wskaźników - OGRANICZAMY DO TOP 20
+  // Backend zwraca 50, ale my wyświetlamy tylko 20 najlepszych dla czytelności
   const xValues = Object.keys(corrData).slice(0, 20);
   
-  // OÅ› Y: Metody badawcze
-  const yValues = ['Pearson (Liniowa)', 'Spearman (Rangowa)', 'Kendall (ZgodnoÅ›Ä‡)'];
+  // Oś Y: Metody badawcze
+  const yValues = ['Pearson (Liniowa)', 'Spearman (Rangowa)', 'Kendall (Zgodność)'];
 
-  // OÅ› Z: WartoÅ›ci korelacji (Macierz)
-  // Mapujemy tylko te xValues, ktÃ³re zostaÅ‚y po przyciÄ™ciu (Top 20)
+  // Oś Z: Wartości korelacji (Macierz)
+  // Mapujemy tylko te xValues, które zostały po przycięciu (Top 20)
   const zValues = [
     xValues.map(feat => corrData[feat]['pearson']),
     xValues.map(feat => corrData[feat]['spearman']),
     xValues.map(feat => corrData[feat]['kendall'])
   ];
 
-  // Tekst do wyÅ›wietlenia w komÃ³rkach (Formatowanie %)
+  // Tekst do wyświetlenia w komórkach (Formatowanie %)
   const textValues = zValues.map(row => 
     row.map(val => `${(val * 100).toFixed(0)}%`)
   );
 
   return (
-    <div style={{ width: '100%', padding: '10px', background: '#1e222d', borderRadius: '8px', border: '1px solid #363a45' }}>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-             <h4 style={{margin:0, color: '#d1d4dc'}}>
-               ðŸ“Š Mapa Korelacji (Top 20 WskaÅºnikÃ³w)
-               <span style={{fontSize: '0.7em', color: '#888', marginLeft: '10px', fontWeight: 'normal'}}>
+    <div className="correlation-panel">
+        <div className="correlation-header">
+             <h4 className="correlation-title">
+               📊 Mapa Korelacji (Top 20 Wskaźników)
+               <span className="correlation-subtitle">
                  (Cieplej = Silniejsza korelacja)
                </span>
              </h4>
              <button 
                 onClick={fetchCorrelations} 
-                className="ai-button"
-                style={{fontSize: '0.8em', padding: '6px 12px', background: '#444', border: 'none'}}
+                className="ai-button btn-refresh"
              >
-                OdÅ›wieÅ¼
+                Odśwież
              </button>
         </div>
 
-        <div style={{ width: '100%', height: '350px' }}>
+        <div className="correlation-chart">
             <Plot
                 data={[{
                     x: xValues,
@@ -106,14 +105,14 @@ const CorrelationPanel = ({ ticker }) => {
                     xaxis: { 
                         side: 'bottom',
                         tickangle: -45,
-                        tickfont: { size: 11 } // Nieco wiÄ™ksza czcionka, bo jest mniej kolumn
+                        tickfont: { size: 11 }
                     },
                     yaxis: {
                         tickfont: { size: 12, style: 'bold' }
                     }
                 }}
                 useResizeHandler={true}
-                style={{ width: "100%", height: "100%" }}
+                className="plot-full-size"
                 config={{ displayModeBar: false }}
             />
         </div>

@@ -28,7 +28,7 @@ const BacktestPanel = ({ ticker, config }) => {
       setResults(response.data);
     } catch (err) { 
         console.error(err);
-        alert("BÅ‚Ä…d symulacji. SprawdÅº czy pobrano dane w sekcji Analizy."); 
+        alert("Błąd symulacji. Sprawdź czy pobrano dane w sekcji Analizy."); 
     } finally { 
         setLoading(false); 
     }
@@ -39,23 +39,21 @@ const BacktestPanel = ({ ticker, config }) => {
   
   if (results && results.equity_curve && results.chart_dates) {
       
-      // 1. Mapa pomocnicza: Data -> WartoÅ›Ä‡ Portfela (Equity)
-      // DziÄ™ki temu wiemy, na jakiej wysokoÅ›ci narysowaÄ‡ trÃ³jkÄ…t w danym dniu
+      // 1. Mapa pomocnicza: Data -> Wartość Portfela (Equity)
       const dateToEquity = {};
       results.chart_dates.forEach((date, index) => {
           dateToEquity[date] = results.equity_curve[index];
       });
 
-      // 2. Przygotowanie markerÃ³w KUPNA i SPRZEDAÅ»Y
+      // 2. Przygotowanie markerów KUPNA i SPRZEDAŻY
       const buys = { x: [], y: [], text: [] };
       const sells = { x: [], y: [], text: [] };
 
       results.trades.forEach(trade => {
           const equityValue = dateToEquity[trade.date];
-          // JeÅ›li z jakiegoÅ› powodu daty nie ma w mapie (rzadkie), pomijamy
           if (equityValue === undefined) return;
 
-          const tooltip = `Cena: ${trade.price.toFixed(2)}<br>PowÃ³d: ${trade.reason}`;
+          const tooltip = `Cena: ${trade.price.toFixed(2)}<br>Powód: ${trade.reason}`;
 
           if (trade.type === 'BUY') {
               buys.x.push(trade.date);
@@ -89,10 +87,10 @@ const BacktestPanel = ({ ticker, config }) => {
         name: 'Twoja Strategia',
         line: { color: '#00e676', width: 2 },
         fill: 'tozeroy',
-        fillcolor: 'rgba(0, 230, 118, 0.05)' // Bardzo delikatne tÅ‚o
+        fillcolor: 'rgba(0, 230, 118, 0.05)'
       });
 
-      // Markery KUPNA (Zielone trÃ³jkÄ…ty w gÃ³rÄ™)
+      // Markery KUPNA (Zielone trójkąty w górę)
       if (buys.x.length > 0) {
           plotData.push({
               x: buys.x,
@@ -106,13 +104,13 @@ const BacktestPanel = ({ ticker, config }) => {
           });
       }
 
-      // Markery SPRZEDAÅ»Y (Czerwone trÃ³jkÄ…ty w dÃ³Å‚)
+      // Markery SPRZEDAŻY (Czerwone trójkąty w dół)
       if (sells.x.length > 0) {
           plotData.push({
               x: sells.x,
               y: sells.y,
               mode: 'markers',
-              name: 'SprzedaÅ¼',
+              name: 'Sprzedaż',
               type: 'scatter',
               marker: { symbol: 'triangle-down', color: '#ff5252', size: 10, line: { color: 'white', width: 1 } },
               text: sells.text,
@@ -122,50 +120,53 @@ const BacktestPanel = ({ ticker, config }) => {
   }
 
   return (
-    <div style={{ padding: '10px' }}>
+    <div className="backtest-wrapper">
       
       {/* KONTROLKI STRATEGII */}
-      <div className="controls-row" style={{ flexWrap: 'wrap', gap: '20px', alignItems: 'flex-end', borderTop: 'none', paddingTop: 0, justifyContent: 'center' }}>
+      <div className="controls-row backtest-controls">
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <span style={{fontSize: '0.8em', color: '#888'}}>SygnaÅ‚y ANFIS</span>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="control-group">
+          <span className="control-label">Sygnały ANFIS</span>
+          <div className="control-inputs">
             <label>Kup &ge;</label>
-            <input type="number" value={buyThresh} onChange={e => setBuyThresh(e.target.value)} style={{width: '50px'}} />
+            <input type="number" value={buyThresh} onChange={e => setBuyThresh(e.target.value)} className="input-small" />
             <label>Sprzedaj &le;</label>
-            <input type="number" value={sellThresh} onChange={e => setSellThresh(e.target.value)} style={{width: '50px'}} />
+            <input type="number" value={sellThresh} onChange={e => setSellThresh(e.target.value)} className="input-small" />
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <span style={{fontSize: '0.8em', color: '#888'}}>Ryzyko (%)</span>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="control-group">
+          <span className="control-label">Ryzyko (%)</span>
+          <div className="control-inputs">
             <label>SL</label>
-            <input type="number" value={stopLoss} onChange={e => setStopLoss(e.target.value)} style={{width: '50px'}} />
+            <input type="number" value={stopLoss} onChange={e => setStopLoss(e.target.value)} className="input-small" />
             <label>TP</label>
-            <input type="number" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} style={{width: '50px'}} />
+            <input type="number" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} className="input-small" />
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-             <span style={{fontSize: '0.8em', color: '#888'}}>Opcje</span>
-             <label style={{display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', height: '30px'}}>
+        <div className="control-group">
+             <span className="control-label">Opcje</span>
+             <label className="trailing-label">
                 <input type="checkbox" checked={trailingStop} onChange={e => setTrailingStop(e.target.checked)} />
                 Trailing
              </label>
         </div>
 
-        <button onClick={runSimulation} disabled={loading} style={{ height: '35px', padding: '0 20px' }}>
-            {loading ? '...' : 'â–¶ Start'}
+        <button onClick={runSimulation} disabled={loading} className="btn-start">
+            {loading ? '...' : '▶ Start'}
         </button>
       </div>
 
       {/* WYNIKI */}
       {results && (
-        <div style={{ marginTop: '30px' }}>
+        <div className="results-container">
             
             <div className="stats-grid">
-                <div className="stat-box" style={{borderColor: results.total_return > results.buy_and_hold_return ? '#00e676' : '#444'}}>
+                <div 
+                  className="stat-box" 
+                  style={{borderColor: results.total_return > results.buy_and_hold_return ? '#00e676' : '#444'}}
+                >
                     <div className="stat-label">Strategia</div>
                     <div className={`stat-val ${results.total_return >= 0 ? 'green' : 'red'}`}>
                         {results.total_return > 0 ? '+' : ''}{results.total_return}%
@@ -175,7 +176,7 @@ const BacktestPanel = ({ ticker, config }) => {
                 
                 <div className="stat-box">
                     <div className="stat-label">Rynek</div>
-                    <div className="stat-val" style={{color: '#89b4fa'}}>
+                    <div className="stat-val stat-val-blue">
                         {results.buy_and_hold_return > 0 ? '+' : ''}{results.buy_and_hold_return}%
                     </div>
                 </div>
@@ -194,7 +195,7 @@ const BacktestPanel = ({ ticker, config }) => {
             </div>
 
             {/* WYKRES Z MARKERAMI */}
-            <div style={{ marginTop: '20px', height: '450px', border: '1px solid #363a45', borderRadius: '8px', padding: '10px', background: '#1e222d' }}>
+            <div className="backtest-chart">
                  <Plot
                     data={plotData}
                     layout={{
@@ -204,37 +205,37 @@ const BacktestPanel = ({ ticker, config }) => {
                         font: { color: '#d1d4dc' },
                         margin: { t: 40, b: 40, l: 60, r: 20 },
                         xaxis: { showgrid: false },
-                        yaxis: { title: 'WartoÅ›Ä‡ Portfela ($)', gridcolor: '#2a2e39' },
+                        yaxis: { title: 'Wartość Portfela ($)', gridcolor: '#2a2e39' },
                         legend: { orientation: 'h', y: 1.05, x: 0.5, xanchor: 'center' },
                         hovermode: 'closest'
                     }}
                     useResizeHandler={true}
-                    style={{ width: "100%", height: "100%" }}
+                    className="plot-full-size"
                  />
             </div>
 
             {/* TABELA */}
-            <div style={{ marginTop: '20px', maxHeight: '300px', overflowY: 'auto', background: '#1a1d26', padding: '15px', borderRadius: '8px', fontSize: '0.85em' }}>
-                <table style={{width: '100%', borderCollapse: 'collapse', textAlign: 'left'}}>
-                    <thead style={{position: 'sticky', top: 0, background: '#1a1d26'}}>
-                        <tr style={{color: '#888'}}>
-                            <th style={{padding:'5px'}}>Data</th>
+            <div className="trades-table-container">
+                <table className="trades-table">
+                    <thead>
+                        <tr className="trades-table-header">
+                            <th>Data</th>
                             <th>Typ</th>
                             <th>Cena</th>
-                            <th>PowÃ³d</th>
+                            <th>Powód</th>
                             <th>Zysk</th>
                         </tr>
                     </thead>
                     <tbody>
                         {results.trades.slice().reverse().map((t, i) => (
-                            <tr key={i} style={{borderBottom: '1px solid #2a2e39'}}>
-                                <td style={{padding:'8px 5px'}}>{t.date}</td>
-                                <td style={{color: t.type === 'BUY' ? '#00e676' : '#ff5252', fontWeight: 'bold'}}>{t.type}</td>
+                            <tr key={i} className="trades-table-row">
+                                <td>{t.date}</td>
+                                <td className={t.type === 'BUY' ? 'trade-type-buy' : 'trade-type-sell'}>{t.type}</td>
                                 <td>{t.price.toFixed(2)}</td>
-                                <td style={{fontStyle: 'italic', color: '#aaa'}}>{t.reason}</td>
+                                <td className="trade-reason">{t.reason}</td>
                                 <td>
                                     {t.profit_pct !== undefined ? (
-                                        <span style={{color: t.profit_pct > 0 ? '#00e676' : '#ff5252', fontWeight: 'bold'}}>
+                                        <span className={t.profit_pct > 0 ? 'profit-positive' : 'profit-negative'}>
                                             {t.profit_pct > 0 ? '+' : ''}{t.profit_pct.toFixed(2)}%
                                         </span>
                                     ) : '-'}

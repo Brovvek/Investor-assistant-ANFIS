@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
     ANFIS Machine Learning Engine v2.0 - Advanced Price Prediction
     

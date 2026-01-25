@@ -37,9 +37,6 @@ function App() {
         <div className="title">
           Investor Assistant <span className="highlight">ANFIS</span> Pro
         </div>
-        <div style={{ fontSize: '0.8em', color: '#666' }}>
-          🧠 PyTorch ML Engine v2.0
-        </div>
       </div>
 
       {/* 1. GŁÓWNY PANEL STEROWANIA */}
@@ -66,21 +63,21 @@ function App() {
             {loading ? 'Przeliczanie...' : 'Analizuj Rynek'}
           </button>
         </div>
-        {error && <div style={{color: '#ff5252', textAlign: 'center', marginTop: '15px'}}>{error}</div>}
+        {error && <div className="error-message">{error}</div>}
       </div>
 
-      {/* 2. PANEL KORELACJI */}
+      {/* 2. PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
       <CollapsibleSection title="📊 Mapa Korelacji (Data Science)" defaultOpen={true}>
         <CorrelationPanel ticker={ticker} />
       </CollapsibleSection>
 
       {/* 3. GŁÓWNY WYKRES */}
       <CollapsibleSection title="📈 Wykres Analityczny (Cena + ANFIS)" defaultOpen={true}>
-        <div style={{ height: '600px' }}><MarketChart data={chartData} /></div>
+        <div className="chart-container-600"><MarketChart data={chartData} /></div>
       </CollapsibleSection>
 
-      {/* 4. NOWY! PANEL UCZENIA ANFIS ML */}
-      <CollapsibleSection title="🧠 Uczenie ANFIS (Deep Learning Prediction)" defaultOpen={true}>
+      {/* 4. UCZENIE ANFIS */}
+      <CollapsibleSection title="🧠 Uczenie ANFIS (Deep Learning Prediction)" defaultOpen={false}>
         <AnfisMLPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>
 

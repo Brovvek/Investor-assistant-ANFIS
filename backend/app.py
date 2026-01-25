@@ -1,9 +1,9 @@
 from flask import Flask, jsonify, request, Response, stream_with_context
 from flask_cors import CORS
 from data_engine import DataEngine
-from anfis_engine import AnfisEngine
+from fuzzy_expert_system import FuzzyExpertSystem  # Klasyczny FIS Mamdani (nie ANFIS!)
 from backtest_engine import BacktestEngine
-from optimizer_engine import OptimizerEngine
+from weight_optimizer import WeightOptimizer  # Optymalizator wag (nie uczenie ANFIS!)
 from feature_factory import FeatureFactory
 
 # Try to import v2, fallback to v1
@@ -42,10 +42,10 @@ app = Flask(__name__)
 CORS(app)
 
 data_engine = DataEngine(api_key=FRED_API_KEY) 
-anfis_engine = AnfisEngine()
+fuzzy_expert = FuzzyExpertSystem()  # Klasyczny system rozmyty (NIE ANFIS!)
 backtester = BacktestEngine()
-optimizer = OptimizerEngine()
-anfis_ml = AnfisMLEngine()  # New ML Engine
+weight_optimizer = WeightOptimizer()  # Optymalizator wag metodą DE
+anfis_ml = AnfisMLEngine()  # PRAWDZIWY ANFIS - sieć neuronowa z uczeniem
 
 # --- FUNKCJE POMOCNICZE ---
 
@@ -171,7 +171,7 @@ def analyze():
         df = prepare_data_with_features(ticker)
         if df.empty: return jsonify({"error": "Brak danych"}), 400
 
-        anfis_engine.build_system(config)
+        fuzzy_expert.build_system(config)
         
         oscillator_values = []
         df_analysis = df.tail(1260).copy()
@@ -179,7 +179,7 @@ def analyze():
 
         for index, row in df_analysis.iterrows():
             inputs = {feat: row[feat] for feat in active_features if feat in row}
-            score = anfis_engine.compute(inputs)
+            score = fuzzy_expert.compute(inputs)
             oscillator_values.append(score)
             
         df_analysis['Sentiment_Oscillator'] = oscillator_values
@@ -204,7 +204,7 @@ def run_backtest():
     
     try:
         df = prepare_data_with_features(ticker)
-        anfis_engine.build_system(config)
+        fuzzy_expert.build_system(config)
         
         oscillator_values = []
         df_analysis = df.tail(1260).copy()
@@ -214,13 +214,13 @@ def run_backtest():
         
         for index, row in df_analysis.iterrows():
             inputs = {feat: row[feat] for feat in active_features if feat in row}
-            oscillator_values.append(anfis_engine.compute(inputs))
+            oscillator_values.append(fuzzy_expert.compute(inputs))
             
         df_analysis['Sentiment_Oscillator'] = oscillator_values
         
         max_score = max(oscillator_values) if oscillator_values else 0
         min_score = min(oscillator_values) if oscillator_values else 0
-        print(f"DEBUG ANFIS: Min={min_score:.2f}, Max={max_score:.2f}")
+        print(f"DEBUG FIS: Min={min_score:.2f}, Max={max_score:.2f}")
 
         df_analysis.index.name = 'Date'
         df_analysis.reset_index(inplace=True)
@@ -248,7 +248,7 @@ def optimize():
             df = data_engine.prepare_dataset(ticker)
             def on_progress(percent):
                 yield json_dumps({"status": "progress", "value": percent}) + "\n"
-            best_weights = optimizer.optimize_weights(df, progress_callback=on_progress)
+            best_weights = weight_optimizer.optimize_weights(df, progress_callback=on_progress)
             yield json_dumps({"status": "done", "result": best_weights}) + "\n"
         except Exception as e:
             yield json_dumps({"status": "error", "message": str(e)}) + "\n"
@@ -611,6 +611,272 @@ def get_available_features():
                 "end": str(df.index.max())
             }
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --- HISTORIA TRENINGÓW (CSV) ---
+
+import os
+from datetime import datetime
+
+# Ścieżka do pliku w tym samym katalogu co app.py
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRAINING_HISTORY_FILE = os.path.join(_SCRIPT_DIR, 'training_history.csv')
+print(f"📁 Plik historii treningów: {TRAINING_HISTORY_FILE}")
+
+@app.route('/api/anfis_ml/save_results', methods=['POST'])
+def save_training_results():
+    """Zapisuje wyniki treningu do pliku CSV"""
+    try:
+        req_data = request.json
+        
+        # Generuj unikalne ID
+        import uuid
+        record_id = str(uuid.uuid4())[:8]  # Krótkie ID (8 znaków)
+        
+        # Przygotowanie wiersza danych
+        row = {
+            'id': record_id,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'ticker': req_data.get('ticker', ''),
+            'prediction_type': req_data.get('prediction_type', ''),
+            'epochs': req_data.get('epochs', 0),
+            'num_mfs': req_data.get('num_mfs', 0),
+            'mf_type': req_data.get('mf_type', ''),
+            'optimizer': req_data.get('optimizer', ''),
+            'learning_rate': req_data.get('learning_rate', 0),
+            'batch_size': req_data.get('batch_size', 0),
+            'lookahead': req_data.get('lookahead', 1),
+            'training_days': req_data.get('training_days', 0),
+            'scaler_type': req_data.get('scaler_type', ''),
+            'hybrid': req_data.get('hybrid', False),
+            'features': req_data.get('features', ''),
+            # Metryki
+            'direction_accuracy': req_data.get('direction_accuracy', 0),
+            'rmse': req_data.get('rmse', 0),
+            'mape': req_data.get('mape', 0),
+            'r_squared': req_data.get('r_squared', 0),
+            'correlation': req_data.get('correlation', 0),
+            'train_samples': req_data.get('train_samples', 0),
+            'test_samples': req_data.get('test_samples', 0),
+            'win_rate': req_data.get('win_rate', 0),
+            'sharpe_ratio': req_data.get('sharpe_ratio', 0),
+            'num_rules': req_data.get('num_rules', 0),
+            'final_epoch': req_data.get('final_epoch', 0),
+            'notes': req_data.get('notes', '')
+        }
+        
+        # Sprawdź czy plik istnieje
+        file_exists = os.path.exists(TRAINING_HISTORY_FILE)
+        
+        # Zapisz do CSV
+        df_new = pd.DataFrame([row])
+        
+        if file_exists:
+            df_new.to_csv(TRAINING_HISTORY_FILE, mode='a', header=False, index=False)
+        else:
+            df_new.to_csv(TRAINING_HISTORY_FILE, mode='w', header=True, index=False)
+        
+        print(f"✅ Zapisano wyniki treningu [ID: {record_id}]: {row['ticker']} @ {row['timestamp']}")
+        
+        return jsonify({
+            "success": True,
+            "message": "Wyniki zapisane pomyślnie",
+            "id": record_id,
+            "filename": TRAINING_HISTORY_FILE
+        })
+        
+    except Exception as e:
+        print(f"❌ Błąd zapisu: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/anfis_ml/get_history', methods=['GET'])
+def get_training_history():
+    """Pobiera historię treningów z pliku CSV"""
+    try:
+        print(f"📂 Szukam pliku: {TRAINING_HISTORY_FILE}")
+        
+        if not os.path.exists(TRAINING_HISTORY_FILE):
+            print("⚠️ Plik historii nie istnieje")
+            return Response(
+                json.dumps({"history": [], "total_records": 0, "stats": {}, "message": "Brak pliku"}),
+                mimetype='application/json'
+            )
+        
+        # Wczytaj CSV
+        df = pd.read_csv(TRAINING_HISTORY_FILE)
+        print(f"📊 Wczytano {len(df)} rekordów z CSV")
+        print(f"📊 Kolumny: {list(df.columns)}")
+        
+        if df.empty:
+            return Response(
+                json.dumps({"history": [], "total_records": 0, "stats": {}, "message": "Plik pusty"}),
+                mimetype='application/json'
+            )
+        
+        # Zamień NaN na puste stringi
+        df = df.fillna('')
+        
+        # Sortuj od najnowszych
+        if 'timestamp' in df.columns:
+            df = df.sort_values('timestamp', ascending=False)
+        
+        # Konwertuj do listy słowników - ręcznie dla pewności
+        history = []
+        for _, row in df.iterrows():
+            record = {}
+            for col in df.columns:
+                val = row[col]
+                # Konwertuj numpy types do Python types
+                if pd.isna(val):
+                    record[col] = ''
+                elif hasattr(val, 'item'):  # numpy scalar
+                    record[col] = val.item()
+                else:
+                    record[col] = val
+            history.append(record)
+        
+        print(f"📊 Przygotowano {len(history)} rekordów")
+        
+        # Statystyki
+        stats = {'total_trainings': len(history)}
+        try:
+            if 'direction_accuracy' in df.columns:
+                da_values = pd.to_numeric(df['direction_accuracy'], errors='coerce').dropna()
+                if len(da_values) > 0:
+                    stats['avg_direction_accuracy'] = round(float(da_values.mean()), 2)
+                    stats['max_direction_accuracy'] = round(float(da_values.max()), 2)
+            if 'rmse' in df.columns:
+                rmse_values = pd.to_numeric(df['rmse'], errors='coerce').dropna()
+                if len(rmse_values) > 0:
+                    stats['avg_rmse'] = round(float(rmse_values.mean()), 4)
+        except Exception as e:
+            print(f"⚠️ Błąd statystyk: {e}")
+        
+        result = {
+            "history": history,
+            "total_records": len(history),
+            "stats": stats
+        }
+        
+        print(f"✅ Zwracam odpowiedź z {len(history)} rekordami")
+        
+        # Użyj json.dumps zamiast jsonify dla pewności
+        return Response(
+            json.dumps(result, ensure_ascii=False, default=str),
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Błąd odczytu historii: {e}")
+        traceback.print_exc()
+        return Response(
+            json.dumps({"error": str(e), "history": [], "total_records": 0, "stats": {}}),
+            mimetype='application/json'
+        ), 500
+
+
+@app.route('/api/anfis_ml/delete_history', methods=['DELETE'])
+def delete_training_history():
+    """Usuwa wybrane rekordy lub całą historię treningów"""
+    try:
+        req_data = request.json or {}
+        ids_to_delete = req_data.get('ids', [])
+        
+        if not os.path.exists(TRAINING_HISTORY_FILE):
+            return jsonify({"success": True, "message": "Brak historii do usunięcia", "deleted": 0})
+        
+        # Jeśli nie podano ID, usuń cały plik
+        if not ids_to_delete:
+            os.remove(TRAINING_HISTORY_FILE)
+            print("🗑️ Usunięto całą historię treningów")
+            return jsonify({"success": True, "message": "Cała historia usunięta", "deleted": "all"})
+        
+        # Wczytaj CSV
+        df = pd.read_csv(TRAINING_HISTORY_FILE)
+        original_count = len(df)
+        
+        # Sprawdź czy kolumna 'id' istnieje
+        if 'id' not in df.columns:
+            return jsonify({"success": False, "error": "Brak kolumny ID w pliku historii"}), 400
+        
+        # Filtruj - zostaw tylko te, których ID NIE ma na liście do usunięcia
+        df_filtered = df[~df['id'].isin(ids_to_delete)]
+        deleted_count = original_count - len(df_filtered)
+        
+        # Zapisz z powrotem
+        if len(df_filtered) == 0:
+            os.remove(TRAINING_HISTORY_FILE)
+            print(f"🗑️ Usunięto wszystkie {deleted_count} rekordy (plik usunięty)")
+        else:
+            df_filtered.to_csv(TRAINING_HISTORY_FILE, index=False)
+            print(f"🗑️ Usunięto {deleted_count} rekordów, pozostało {len(df_filtered)}")
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Usunięto {deleted_count} rekordów",
+            "deleted": deleted_count,
+            "remaining": len(df_filtered)
+        })
+        
+    except Exception as e:
+        print(f"❌ Błąd usuwania: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/anfis_ml/export_selected', methods=['POST'])
+def export_selected_history():
+    """Eksportuje wybrane rekordy jako plik CSV"""
+    try:
+        req_data = request.json or {}
+        ids_to_export = req_data.get('ids', [])
+        
+        if not os.path.exists(TRAINING_HISTORY_FILE):
+            return jsonify({"error": "Brak historii do eksportu"}), 404
+        
+        df = pd.read_csv(TRAINING_HISTORY_FILE)
+        
+        # Jeśli podano ID, filtruj
+        if ids_to_export and 'id' in df.columns:
+            df = df[df['id'].isin(ids_to_export)]
+        
+        if df.empty:
+            return jsonify({"error": "Brak rekordów do eksportu"}), 404
+        
+        # Konwertuj do CSV
+        csv_content = df.to_csv(index=False)
+        
+        print(f"📥 Eksportowano {len(df)} rekordów")
+        
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=training_history_selected.csv'}
+        )
+        
+    except Exception as e:
+        print(f"❌ Błąd eksportu: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/anfis_ml/export_history', methods=['GET'])
+def export_training_history():
+    """Eksportuje historię jako plik CSV do pobrania"""
+    try:
+        if not os.path.exists(TRAINING_HISTORY_FILE):
+            return jsonify({"error": "Brak historii do eksportu"}), 404
+        
+        with open(TRAINING_HISTORY_FILE, 'r', encoding='utf-8') as f:
+            csv_content = f.read()
+        
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=training_history.csv'}
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

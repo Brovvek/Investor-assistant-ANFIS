@@ -13,7 +13,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       onConfigChange(res.data);
       alert("Strategia AI wygenerowana!");
     } catch (err) {
-      alert("BÅ‚Ä…d generowania strategii.");
+      alert("Błąd generowania strategii.");
     } finally {
       setGenerating(false);
     }
@@ -34,7 +34,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       },
       'MACD': { 
           enabled: true, 
-          weight: 1.5, // ZwiÄ™kszona waga dla trendu
+          weight: 1.5, // Zwiększona waga dla trendu
           direction: 1 // MACD High = Trend Up = BUY
       },
       'Yield_Curve': { 
@@ -44,7 +44,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       },
       'M2_Liquidity': { 
           enabled: true, 
-          weight: 1.2, // PÅ‚ynnoÅ›Ä‡ jest waÅ¼na
+          weight: 1.2, // Płynność jest ważna
           direction: 1 // M2 Growth = BUY
       }
     };
@@ -62,49 +62,41 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
 
   const formatLabel = (key) => {
     if (key.includes('ROC')) return `Momentum (${key})`;
-    if (key.includes('Volat')) return `ZmiennoÅ›Ä‡ (${key})`;
+    if (key.includes('Volat')) return `Zmienność (${key})`;
     if (key.includes('DistSMA')) return `Trend SMA (${key})`;
-    if (key === 'M2_Liquidity') return 'PÅ‚ynnoÅ›Ä‡ M2';
+    if (key === 'M2_Liquidity') return 'Płynność M2';
     if (key === 'Yield_Curve') return 'Yield Curve';
     return key;
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <h4 style={{ margin: 0, fontWeight: 600 }}>
-          Aktywne WskaÅºniki
+      <div className="info-badges-header">
+        <h4 className="info-badges-title">
+          Aktywne Wskaźniki
         </h4>
         
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="info-badges-buttons">
             <button 
               onClick={handleClassicStrategy}
-              className="ai-button"
-              style={{ 
-                padding: '8px 15px', borderRadius: '20px', fontSize: '0.85em',
-                background: '#444', border: '1px solid #555' 
-              }}
+              className="ai-button btn-classic"
               title="RSI, VIX, MACD, Yield, M2"
             >
-              ðŸ›ï¸ Klasyczna
+              🏛️ Klasyczna
             </button>
 
             <button 
               onClick={handleAutoStrategy} 
               disabled={generating}
-              className="ai-button"
-              style={{ 
-                padding: '8px 15px', borderRadius: '20px', fontSize: '0.85em',
-                background: 'linear-gradient(135deg, #00c853 0%, #64dd17 100%)' 
-              }}
+              className="ai-button btn-ai-green"
             >
-              {generating ? 'Szukanie...' : 'ðŸš€ Generuj (AI)'}
+              {generating ? 'Szukanie...' : '🚀 Generuj (AI)'}
             </button>
         </div>
       </div>
 
       <div className="indicators-bar">
-        {features.length === 0 && <div style={{color:'#666', fontSize:'0.9em', padding:'10px'}}>Wybierz strategiÄ™ powyÅ¼ej.</div>}
+        {features.length === 0 && <div className="empty-strategy-text">Wybierz strategię powyżej.</div>}
 
         {features.map((key) => {
           const itemConfig = config[key];
@@ -124,11 +116,11 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
                 onChange={(e) => handleChange(key, 'enabled', e.target.checked)} 
               />
               
-              <div style={{display:'flex', flexDirection:'column'}}>
-                <span style={{ color: itemConfig.enabled ? '#fff' : '#888', fontWeight: 600, fontSize: '0.9em' }}>
+              <div className="indicator-info">
+                <span className={`indicator-name ${itemConfig.enabled ? 'enabled' : 'disabled'}`}>
                   {formatLabel(key)}
                 </span>
-                <span style={{fontSize: '0.7em', color: '#666'}}>
+                <span className="indicator-direction">
                    Kierunek: {itemConfig.direction > 0 ? 'Pro (+)' : 'Contra (-)'}
                 </span>
               </div>
