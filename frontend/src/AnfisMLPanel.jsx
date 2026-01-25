@@ -348,25 +348,25 @@ const AnfisMLPanel = ({ ticker, config }) => {
 
                         {activeTab === 'rules' && (
               getRules().length > 0 ? (
-                <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8em' }}>
-                    <thead style={{ position: 'sticky', top: 0, background: '#1a1d26' }}>
-                      <tr style={{ color: '#888' }}><th style={{ padding: '8px', textAlign: 'left' }}>#</th><th style={{ padding: '8px', textAlign: 'left' }}>Reguła</th></tr>
+                <div className="rules-table-wrapper">
+                  <table className="rules-table">
+                    <thead>
+                      <tr className="rules-table-header"><th>#</th><th>Reguła</th></tr>
                     </thead>
                     <tbody>
                       {getRules().map((rule, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid #2a2e39' }}>
-                          <td style={{ padding: '6px', color: '#cba6f7' }}>{i + 1}</td>
-                          <td style={{ padding: '6px', fontFamily: 'monospace', fontSize: '0.85em' }}>
-                            <span style={{ color: '#fab387' }}>IF </span>
-                            <span style={{ color: '#89b4fa' }}>{rule.antecedent || 'N/A'}</span>
+                        <tr key={i}>
+                          <td className="rules-table-number">{i + 1}</td>
+                          <td className="rules-table-cell">
+                            <span className="rules-if-keyword">IF </span>
+                            <span className="rules-antecedent">{rule.antecedent || 'N/A'}</span>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : <div style={emptyState}>Brak reguł</div>
+              ) : <div className="rules-empty-state">Brak reguł</div>
             )}
 
             {activeTab === 'debug' && <pre className="debug-pre">{rawResponse || 'Brak'}</pre>}

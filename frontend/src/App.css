@@ -964,6 +964,65 @@ button:disabled {
   font-size: 0.85em;
 }
 
+/* --- Rules Table --- */
+.rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8em;
+}
+
+.rules-table-wrapper {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.rules-table thead {
+  position: sticky;
+  top: 0;
+  background: #1a1d26;
+}
+
+.rules-table-header {
+  color: #888;
+}
+
+.rules-table-header th {
+  padding: 8px;
+  text-align: left;
+}
+
+.rules-table tbody tr {
+  border-bottom: 1px solid #2a2e39;
+}
+
+.rules-table td {
+  padding: 6px;
+}
+
+.rules-table-number {
+  color: #cba6f7;
+}
+
+.rules-table-cell {
+  font-family: monospace;
+  font-size: 0.85em;
+}
+
+.rules-if-keyword {
+  color: #fab387;
+}
+
+.rules-antecedent {
+  color: #89b4fa;
+}
+
+.rules-empty-state {
+  text-align: center;
+  padding: 50px 20px;
+  color: #666;
+  font-size: 0.95em;
+}
+
 /* --- Debug --- */
 .debug-pre {
   background: #0d1117;
