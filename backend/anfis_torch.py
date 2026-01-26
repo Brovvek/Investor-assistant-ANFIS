@@ -3,7 +3,7 @@
 '''
     ANFIS in torch: the ANFIS layers
     @author: James Power <james.power@mu.ie> Apr 12 18:13:10 2019
-    Modified for Investor Assistant ANFIS Pro
+    Modified for Investor Assistant
 '''
 
 import itertools

@@ -29,16 +29,6 @@ dtype = torch.float
 
 
 class AnfisMLEngine:
-    """
-    Advanced ANFIS Engine for Financial Prediction
-    
-    Supported prediction types:
-    - 'returns': Procentowa zmiana ceny (zalecane!)
-    - 'log_returns': Logarytmiczna zmiana (lepsze dla dużych ruchów)
-    - 'direction': Klasyfikacja kierunku (up/down) -> 0 lub 1
-    - 'price': Surowa cena (niezalecane)
-    - 'volatility': Predykcja zmienności
-    """
     
     def __init__(self):
         self.model = None
@@ -62,7 +52,7 @@ class AnfisMLEngine:
             target_col: column to predict
             lookahead: days ahead to predict
             prediction_type: 'returns', 'log_returns', 'direction', 'price', 'volatility'
-            scaler_type: 'robust' (zalecane), 'standard', 'minmax'
+            scaler_type: 'robust', 'standard', 'minmax'
             test_size: fraction for test set
             use_walk_forward: use time series cross-validation
         """
@@ -130,7 +120,7 @@ class AnfisMLEngine:
         # ============ FEATURE SCALING ============
         
         if scaler_type == 'robust':
-            # RobustScaler - odporny na outliers (ZALECANE dla finansów)
+            # RobustScaler - odporny na outliers
             self.scaler_x = RobustScaler()
             self.scaler_y = RobustScaler()
         elif scaler_type == 'standard':

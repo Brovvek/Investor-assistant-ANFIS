@@ -15,10 +15,6 @@ class DataEngine:
         self.api_key = api_key
 
     def _fetch_fred_direct(self, series_id):
-        """
-        Pobiera dane bezpoÅ›rednio z URL API FRED, omijajÄ…c bibliotekÄ™ fredapi
-        i problemy z polskimi znakami w Å›cieÅ¼kach systemowych.
-        """
         url = f"https://api.stlouisfed.org/fred/series/observations"
         params = {
             'series_id': series_id,
@@ -28,7 +24,7 @@ class DataEngine:
         
         try:
             response = requests.get(url, params=params)
-            response.raise_for_status() # ZgÅ‚oÅ› bÅ‚Ä…d jeÅ›li status != 200
+            response.raise_for_status()
             data = response.json()
             
             # Parsowanie JSON do DataFrame
@@ -51,16 +47,16 @@ class DataEngine:
             return pd.Series(dtype=float)
 
     def get_market_data(self, ticker, period="max"):
-        print(f"Pobieranie danych gieÅ‚dowych dla {ticker}...")
+        print(f"Pobieranie danych giełdowych dla {ticker}...")
         try:
             df = yf.download(ticker, period=period, interval="1d", progress=False)
         except Exception as e:
-            print(f"BÅ‚Ä…d yfinance: {e}")
+            print(f"Błąd yfinance: {e}")
             return pd.DataFrame()
         
         if df.empty: return pd.DataFrame()
 
-        # ObsÅ‚uga kolumn (MultiIndex fix)
+        # Obsługa kolumn (MultiIndex fix)
         if isinstance(df.columns, pd.MultiIndex):
             try: df = df.xs('Close', level=0, axis=1)
             except: 
@@ -72,7 +68,7 @@ class DataEngine:
             df = df.rename(columns={df.columns[0]: 'Price'})
             df = df[['Price']]
 
-        # --- WSKAÅ¹NIKI TECHNICZNE ---
+        # --- WSKAŹNIKI TECHNICZNE ---
         try:
             # 1. RSI
             delta = df['Price'].diff()
@@ -136,7 +132,7 @@ class DataEngine:
         # ÅÄ…czenie (Left Join do cen akcji)
         df = market_df.join(macro_df, how='left')
         
-        # WypeÅ‚nianie danych makro (ffill) - rozciÄ…gamy dane miesiÄ™czne na dzienne
+        # Wypełnianie danych makro (ffill) - rozciÄ…gamy dane miesiÄ™czne na dzienne
         df.ffill(inplace=True)
         
         # Zabezpieczenie: JeÅ›li API nie zadziaÅ‚aÅ‚o, wstawiamy zera, Å¼eby aplikacja nie padÅ‚a

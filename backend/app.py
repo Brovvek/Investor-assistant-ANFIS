@@ -42,10 +42,10 @@ app = Flask(__name__)
 CORS(app)
 
 data_engine = DataEngine(api_key=FRED_API_KEY) 
-fuzzy_expert = FuzzyExpertSystem()  # Klasyczny system rozmyty (NIE ANFIS!)
+fuzzy_expert = FuzzyExpertSystem()  # Klasyczny system rozmyty FIS
 backtester = BacktestEngine()
 weight_optimizer = WeightOptimizer()  # Optymalizator wag metodą DE
-anfis_ml = AnfisMLEngine()  # PRAWDZIWY ANFIS - sieć neuronowa z uczeniem
+anfis_ml = AnfisMLEngine()  # ANFIS - sieć neuronowa z uczeniem
 
 # --- FUNKCJE POMOCNICZE ---
 
@@ -134,7 +134,7 @@ def auto_strategy():
 @app.route('/api/correlations', methods=['POST'])
 def calculate_correlations():
     req_data = request.json
-    ticker = req_data.get('ticker', '^GSPC')
+    ticker = req_data.get('ticker', 'BTC-USD')
     try:
         df_raw = data_engine.prepare_dataset(ticker)
         df = FeatureFactory.generate_features(df_raw)

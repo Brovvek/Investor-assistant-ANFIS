@@ -13,7 +13,7 @@ const InfoBadges = ({ config, onConfigChange, ticker }) => {
       onConfigChange(res.data);
       alert("Strategia AI wygenerowana!");
     } catch (err) {
-      alert("Błąd generowania strategii.");
+      alert("Błąd generowania strategii." + err);
     } finally {
       setGenerating(false);
     }

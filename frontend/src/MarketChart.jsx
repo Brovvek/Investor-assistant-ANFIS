@@ -5,7 +5,6 @@ import './App.css';
 const MarketChart = ({ data }) => {
   if (!data) return <div className="no-data-message">Brak danych do wyświetlenia.</div>;
 
-  // 1. CENA (Oś Lewa - Y1)
   const tracePrice = {
     x: data.Date, y: data.Price,
     name: 'Cena Aktywa', type: 'scatter', mode: 'lines',
@@ -13,10 +12,9 @@ const MarketChart = ({ data }) => {
     xaxis: 'x', yaxis: 'y'
   };
 
-  // 2. ANFIS (Oś Prawa - Y2 0-100)
   const traceAnfis = {
     x: data.Date, y: data.Sentiment_Oscillator,
-    name: 'ANFIS (Wynik)', type: 'scatter', mode: 'lines',
+    name: 'FIS (Wynik)', type: 'scatter', mode: 'lines',
     line: { color: '#f38ba8', width: 3 }, 
     fill: 'tozeroy', fillcolor: 'rgba(243, 139, 168, 0.1)',
     xaxis: 'x', yaxis: 'y2'

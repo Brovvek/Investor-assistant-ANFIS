@@ -9,7 +9,7 @@ import AnfisMLPanel from './AnfisMLPanel';
 import './App.css';
 
 function App() {
-  const [ticker, setTicker] = useState('^GSPC');
+  const [ticker, setTicker] = useState('BTC-USD');
   const [chartData, setChartData] = useState(null);
   const [tickersList, setTickersList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -66,25 +66,26 @@ function App() {
         {error && <div className="error-message">{error}</div>}
       </div>
 
-      {/* 2. PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
+      {/* PANEL KORELACJI (TERAZ PRZED WYKRESEM) */}
       <CollapsibleSection title="📊 Mapa Korelacji (Data Science)" defaultOpen={false}>
         <CorrelationPanel ticker={ticker} />
       </CollapsibleSection>
 
-      {/* 3. GŁÓWNY WYKRES */}
+      {/* GŁÓWNY WYKRES */}
       <CollapsibleSection title="📈 Wykres Analityczny (Cena + FIS)" defaultOpen={true}>
         <div className="chart-container-600"><MarketChart data={chartData} /></div>
       </CollapsibleSection>
 
-      {/* 4. UCZENIE ANFIS */}
+      {/* BACKTEST */}
+      <CollapsibleSection title="💰 Symulator Strategii FIS(Backtest)" defaultOpen={false}>
+        <BacktestPanel ticker={ticker} config={indicatorsConfig} />
+      </CollapsibleSection>
+      
+      {/* UCZENIE ANFIS */}
       <CollapsibleSection title="🧠 Uczenie ANFIS (Deep Learning Prediction)" defaultOpen={false}>
         <AnfisMLPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>
 
-      {/* 5. BACKTEST */}
-      <CollapsibleSection title="💰 Symulator Strategii FIS(Backtest)" defaultOpen={false}>
-        <BacktestPanel ticker={ticker} config={indicatorsConfig} />
-      </CollapsibleSection>
     </div>
   );
 }
