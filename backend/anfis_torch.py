@@ -170,14 +170,25 @@ class ConsequentLayer(torch.nn.Module):
         
         # Check for NaN/Inf in inputs
         if torch.isnan(x).any() or torch.isinf(x).any():
-            print('Warning: Input x contains NaN/Inf values')
-            return
+            print('Warning: Input x contains NaN/Inf values - cleaning...')
+            x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
+            x = torch.where(torch.isinf(x), torch.zeros_like(x), x)
         if torch.isnan(y_actual).any() or torch.isinf(y_actual).any():
-            print('Warning: Output y_actual contains NaN/Inf values')
-            return
+            print('Warning: Output y_actual contains NaN/Inf values - cleaning...')
+            y_actual = torch.where(torch.isnan(y_actual), torch.zeros_like(y_actual), y_actual)
+            y_actual = torch.where(torch.isinf(y_actual), torch.zeros_like(y_actual), y_actual)
+        
+        # Clean NaN/Inf from weights
         if torch.isnan(weights).any() or torch.isinf(weights).any():
-            print('Warning: Weights contain NaN/Inf values')
-            return
+            print('Warning: Weights contain NaN/Inf values - cleaning...')
+            weights = torch.where(torch.isnan(weights), torch.zeros_like(weights), weights)
+            weights = torch.where(torch.isinf(weights), torch.zeros_like(weights), weights)
+            # Renormalize weights after cleaning
+            row_sums = weights.sum(dim=1, keepdim=True)
+            zero_mask = row_sums == 0
+            if zero_mask.any():
+                weights[zero_mask.squeeze(1)] = torch.ones_like(weights[zero_mask.squeeze(1)]) / weights.shape[1]
+            weights = F.normalize(weights, p=1, dim=1)
         
         # Add bias term to inputs
         x_plus = torch.cat([x, torch.ones(batch_size, 1, dtype=x.dtype, device=x.device)], dim=1)  # (batch, n_in+1)
@@ -348,6 +359,17 @@ class AnfisNet(torch.nn.Module):
     def forward(self, x):
         self.fuzzified = self.layer['fuzzify'](x)
         self.raw_weights = self.layer['rules'](self.fuzzified)
+        
+        # Clean NaN/Inf values from raw weights before normalization
+        self.raw_weights = torch.where(torch.isnan(self.raw_weights), torch.zeros_like(self.raw_weights), self.raw_weights)
+        self.raw_weights = torch.where(torch.isinf(self.raw_weights), torch.zeros_like(self.raw_weights), self.raw_weights)
+        
+        # Replace any all-zero rows (all rules failed) with uniform distribution
+        row_sums = self.raw_weights.sum(dim=1, keepdim=True)
+        zero_mask = row_sums == 0
+        if zero_mask.any():
+            self.raw_weights[zero_mask.squeeze(1)] = torch.ones_like(self.raw_weights[zero_mask.squeeze(1)]) / self.raw_weights.shape[1]
+        
         self.weights = F.normalize(self.raw_weights, p=1, dim=1)
         self.rule_tsk = self.layer['consequent'](x)
         y_pred = torch.bmm(self.rule_tsk, self.weights.unsqueeze(2))

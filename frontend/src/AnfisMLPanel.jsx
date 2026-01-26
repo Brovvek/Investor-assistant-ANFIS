@@ -409,7 +409,7 @@ const AnfisMLPanel = ({ ticker, config }) => {
             {activeTab === 'loss' && (getTrainHistory().epochs?.length > 0 ? (
               <div className="grid-charts">
                 <Plot data={[{ x: getTrainHistory().epochs, y: getTrainHistory().train_loss, name: 'Train', line: { color: '#2962ff' } }, { x: getTrainHistory().epochs, y: getTrainHistory().val_loss, name: 'Val', line: { color: '#ff5252' } }]} layout={{ title: { text: 'Loss', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 35, b: 35, l: 45, r: 10 }, legend: { orientation: 'h', y: 1.15 } }} className="chart-md" />
-                <Plot data={[{ x: getTrainHistory().epochs, y: getTrainHistory().val_direction_acc || [], name: 'Celność', line: { color: '#00e676' }, fill: 'tozeroy' }]} layout={{ title: { text: 'Celność', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 35, b: 35, l: 45, r: 10 }, yaxis: { range: [40, 70] } }} className="chart-md" />
+                <Plot data={[{ x: getTrainHistory().epochs, y: getTrainHistory().val_direction_acc || [], name: 'Celność', line: { color: '#00e676' }, fill: 'tozeroy' }]} layout={{ title: { text: 'Celność', font: { color: '#d1d4dc', size: 12 } }, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#d1d4dc' }, margin: { t: 35, b: 35, l: 45, r: 10 }, yaxis: { range: [0, 100] } }} className="chart-md" />
               </div>
             ) : <div className="empty-state">Brak danych</div>)}
 
