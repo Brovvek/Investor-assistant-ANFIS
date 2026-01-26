@@ -1,9 +1,8 @@
-# 📊 ANFIS Pro - Investor Assistant
+# 📊 Investor Assistant
 ## Dokumentacja Techniczna i Instrukcja Obsługi
 
-**Wersja:** 2.0  
-**Data:** Styczeń 2025  
-**Autor:** System uczenia maszynowego oparty na logice rozmytej (ANFIS)
+**Data:** Styczeń 2026  
+**Autor:** Marek Kotulski
 
 ---
 
@@ -27,9 +26,8 @@
 
 # 1. Wprowadzenie
 
-## 1.1 Czym jest ANFIS Pro?
-
-**ANFIS Pro - Investor Assistant** to zaawansowany system wspomagania decyzji inwestycyjnych oparty na **Adaptacyjnym Neuro-Rozmytym Systemie Wnioskowania (ANFIS)**. System łączy:
+## 1.1 Czym jest Investor Assistant?
+**Investor Assistant** to zaawansowany system wspomagania decyzji inwestycyjnych oparty na **Adaptacyjnym Neuro-Rozmytym Systemie Wnioskowania (ANFIS)**. System łączy:
 
 - **Logikę rozmytą** (Fuzzy Logic) - do modelowania niepewności rynkowej
 - **Sieci neuronowe** (Neural Networks) - do uczenia się wzorców z danych historycznych
@@ -40,10 +38,10 @@
 
 | Funkcja | Opis |
 |---------|------|
-| **Analiza rynku** | Generowanie sygnałów kupna/sprzedaży na podstawie oscylatora ANFIS |
+| **Analiza rynku** | Generowanie sygnałów kupna/sprzedaży na podstawie oscylatora |
 | **Uczenie maszynowe** | Trening modeli ANFIS do predykcji kierunku zmian cen |
 | **Backtest** | Symulacja strategii na danych historycznych |
-| **Mapa korelacji** | Analiza zależności między wskaźnikami a przyszłymi zwrotami |
+| **Mapa korelacji** | Analiza zależności między wskaźnikami |
 | **Auto-strategia** | Automatyczne dobieranie najlepszych wskaźników przez AI |
 | **Historia treningów** | Zapisywanie i porównywanie wyników eksperymentów |
 
@@ -62,8 +60,8 @@ W projekcie używane są **dwa różne systemy**, które łatwo pomylić:
 
 **Co to jest:**
 - Klasyczny **System Rozmyty** typu Mamdani
-- **NIE MA uczenia maszynowego!**
-- Reguły i funkcje przynależności zdefiniowane **ręcznie przez eksperta**
+- **NIE MA uczenia maszynowego**
+- Reguły i funkcje przynależności zdefiniowane **ręcznie**
 - Generuje oscylator sentymentu w czasie rzeczywistym
 
 **Inne nazwy:** FLC (Fuzzy Logic Controller), Fuzzy Expert System
@@ -87,7 +85,7 @@ Człowiek definiuje:                  System oblicza:
 - **Prawdziwy ANFIS** - hybryda sieci neuronowej i logiki rozmytej
 - **UCZY SIĘ** z danych przez gradient descent
 - Parametry MF i reguł są **optymalizowane automatycznie**
-- System Sugeno (TSK), nie Mamdani
+- System Sugeno (TSK)
 
 ```
 Dane treningowe:                     Sieć neuronowa uczy się:
@@ -119,16 +117,16 @@ Dane treningowe:                     Sieć neuronowa uczy się:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         FRONTEND (React)                         │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
-│  │  App    │ │ Market  │ │Backtest │ │Correlat.│ │ANFIS ML │   │
-│  │  .jsx   │ │ Chart   │ │ Panel   │ │ Panel   │ │ Panel   │   │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘   │
+│                         FRONTEND (React)                        │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐    │
+│  │  App    │ │ Market  │ │Backtest │ │Correlat.│ │ANFIS ML │    │
+│  │  .jsx   │ │ Chart   │ │ Panel   │ │ Panel   │ │ Panel   │    │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘    │
 └─────────────────────────────────────────────────────────────────┘
                               │ HTTP/REST
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      BACKEND (Flask/Python)                      │
+│                      BACKEND (Flask/Python)                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  app.py     │  │ Data Engine │  │ ANFIS ML Engine v2      │  │
 │  │  (REST API) │  │ (yfinance)  │  │ (PyTorch - PRAWDZIWY    │  │
@@ -136,14 +134,14 @@ Dane treningowe:                     Sieć neuronowa uczy się:
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │   Backtest  │  │   Feature   │  │  FIS Mamdani (skfuzzy)  │  │
-│  │   Engine    │  │   Factory   │  │  (NIE ANFIS! Bez uczenia│  │
-│  │   Engine    │  │   Factory   │  │  (klasyczny oscylator)  │  │
+│  │   Engine    │  │   Factory   │  │                         │  │
+│  │             │  │             │  │  (klasyczny oscylator)  │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      ŹRÓDŁA DANYCH                               │
+│                      ŹRÓDŁA DANYCH                              │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  Yahoo      │  │   FRED API  │  │  Pliki lokalne (CSV)    │  │
 │  │  Finance    │  │  (FED Data) │  │  training_history.csv   │  │
@@ -151,34 +149,7 @@ Dane treningowe:                     Sieć neuronowa uczy się:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 2.2 Przepływ danych
 
-```
-1. Użytkownik wybiera ticker (np. ^GSPC)
-           │
-           ▼
-2. DataEngine pobiera dane:
-   - Ceny z Yahoo Finance
-   - Wskaźniki makro z FRED API
-           │
-           ▼
-3. FeatureFactory generuje cechy:
-   - Momentum (ROC)
-   - Zmienność (Volatility)
-   - Odchylenie od SMA
-           │
-           ▼
-4. Normalizacja (ranking percentylowy 0-100)
-           │
-           ▼
-5. ANFIS/ML przetwarza dane:
-   - Funkcje przynależności (Gaussowskie)
-   - Reguły rozmyte (IF-THEN)
-   - Wyjście: Sentiment 0-100
-           │
-           ▼
-6. Wyświetlenie na wykresie + sygnały
-```
 
 ---
 
@@ -212,6 +183,7 @@ Dane treningowe:                     Sieć neuronowa uczy się:
 ### Krok 1: Utwórz środowisko wirtualne
 ```bash
 # Windows
+cd backend
 python -m venv venv
 venv\Scripts\activate
 
@@ -241,31 +213,13 @@ Backend uruchomi się na: `http://127.0.0.1:5000`
 
 ## 4.2 Instalacja frontendu (React)
 
-### Krok 1: Utwórz projekt React (jeśli nie istnieje)
+### Krok 1: Zainstaluj zależności
 ```bash
-npm create vite@latest frontend -- --template react
 cd frontend
+npm install
 ```
 
-### Krok 2: Zainstaluj zależności
-```bash
-npm install axios react-plotly.js plotly.js
-```
-
-### Krok 3: Skopiuj pliki JSX i CSS
-Skopiuj wszystkie pliki `.jsx` i `.css` z paczki do folderu `src/`:
-- App.jsx
-- App.css
-- MarketChart.jsx
-- BacktestPanel.jsx
-- CorrelationPanel.jsx
-- InfoBadges.jsx
-- CollapsibleSection.jsx
-- AnfisMLPanel.jsx
-- main.jsx
-- index.css
-
-### Krok 4: Uruchom frontend
+### Krok 2: Uruchom frontend
 ```bash
 npm run dev
 ```
@@ -284,13 +238,12 @@ Frontend uruchomi się na: `http://localhost:5173`
 # 5. Struktura projektu
 
 ```
-anfis-pro/
+Inwestor Assistant ANFIS/
 │
 ├── backend/
 │   ├── app.py                    # Główny serwer Flask (API)
 │   ├── fuzzy_expert_system.py    # System rozmyty FIS Mamdani (NIE ANFIS!)
 │   ├── weight_optimizer.py       # Optymalizator wag metodą DE
-│   ├── anfis_ml_engine.py        # Silnik ML v1.0
 │   ├── anfis_ml_engine_v2.py     # Silnik ML v2.0 (PRAWDZIWY ANFIS!)
 │   ├── anfis_torch.py            # Implementacja ANFIS w PyTorch
 │   ├── backtest_engine.py        # Silnik backtestingu
@@ -414,7 +367,7 @@ Dla każdej kolumny bazowej (Price, RSI, VIX, MACD, M2) i okna czasowego (5, 10,
 1. FUZZYFIKACJA (zamiana liczby na zbiory rozmyte)
    Input (0-100) → Funkcje przynależności (Low, Medium, High)
    
-2. REGUŁY ROZMYTE (zdefiniowane przez eksperta - NIE UCZONE!)
+2. REGUŁY ROZMYTE (zdefiniowane przez eksperta - NIE UCZONE)
    IF input IS high THEN sentiment IS buy
    IF input IS medium THEN sentiment IS neutral
    IF input IS low THEN sentiment IS sell
@@ -437,7 +390,7 @@ Dla każdej kolumny bazowej (Price, RSI, VIX, MACD, M2) i okna czasowego (5, 10,
     0.0 ──│─────\/─────│─────\/─────│──
           0    20     50     80    100
           
-    Centra: LOW=20, MEDIUM=50, HIGH=80 (SZTYWNE - nie uczą się!)
+    Centra: LOW=20, MEDIUM=50, HIGH=80 (SZTYWNE - nie uczą się)
 ```
 
 ### Typy logiki:
@@ -454,12 +407,12 @@ Dla każdej kolumny bazowej (Price, RSI, VIX, MACD, M2) i okna czasowego (5, 10,
 
 ## 6.5 weight_optimizer.py - Optymalizator Wag
 
-> ⚠️ **WAŻNE:** Ten moduł to **NIE jest uczenie ANFIS!** To optymalizacja meta-heurystyczna wag.
+> ⚠️ Ten moduł to **NIE jest uczenie ANFIS** To optymalizacja meta-heurystyczna wag.
 
 ### Co robi:
 - Szuka najlepszych **WAG** dla wskaźników (RSI, VIX, MACD, etc.)
 - Używa algorytmu **Differential Evolution** (ewolucja różnicowa)
-- **NIE modyfikuje** funkcji przynależności ani reguł!
+- **NIE modyfikuje** funkcji przynależności ani reguł
 
 ### Jak działa:
 
@@ -499,7 +452,7 @@ Ten moduł implementuje **prawdziwy ANFIS** jako sieć neuronową w PyTorch.
     ┌─────────────────────┐
     │  Fuzzification      │  ← Funkcje przynależności (Gauss/Bell/Tri)
     │  Layer              │     μ(x) = exp(-((x-c)/σ)²)
-    │                     │     c, σ SĄ UCZONE!
+    │                     │     c, σ SĄ UCZONE
     └─────────────────────┘
               │
               ▼
@@ -632,15 +585,6 @@ Umożliwia testowanie strategii na danych historycznych.
 | TP (%) | 0 | Take Profit (0 = wyłączony) |
 | Trailing | Off | Trailing Stop |
 
-## 7.6 AnfisMLPanel.jsx - Panel uczenia maszynowego
-
-Najbardziej zaawansowany panel - trening modeli ANFIS.
-
-### Sekcje:
-1. **Parametry treningu** - konfiguracja modelu
-2. **Wyniki** - metryki i wykresy
-3. **Zakładki** - Predykcje, Scatter, Loss, MF, Ważność, Reguły, Debug
-4. **Historia treningów** - zapisane eksperymenty
 
 ---
 
@@ -834,7 +778,7 @@ Eksportuje wybrane rekordy jako CSV.
 
 ### Krok 4: Analizuj
 - Kliknij **"Analizuj Rynek"**
-- Obserwuj wykres ceny i oscylatora ANFIS
+- Obserwuj wykres ceny i oscylatora
 
 ### Krok 5: Przetestuj strategię
 - Rozwiń sekcję **"Symulator Strategii (Backtest)"**
@@ -843,10 +787,10 @@ Eksportuje wybrane rekordy jako CSV.
 
 ## 9.2 Analiza rynku
 
-### Interpretacja oscylatora ANFIS:
+### Interpretacja oscylatora:
 
 ```
-100 ┬─────────────── SILNE WYKUPIENIE (SELL) ───────────────┐
+100 ┬─────────────── SILNE WYPRZEDANIE (BUY)  ───────────────┐
     │                    Strefa czerwona                     │
  80 ├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
     │                                                        │
@@ -854,13 +798,9 @@ Eksportuje wybrane rekordy jako CSV.
     │                                                        │
  20 ├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
     │                    Strefa zielona                      │
-  0 └─────────────── SILNE WYPRZEDANIE (BUY) ───────────────┘
+  0 └─────────────── SILNE WYKUPIENIE (SELL)  ───────────────┘
 ```
 
-### Sygnały handlowe:
-- **BUY:** Oscylator < 30 i rośnie
-- **SELL:** Oscylator > 70 i spada
-- **HOLD:** Oscylator w strefie neutralnej (30-70)
 
 ## 9.3 Mapa korelacji
 
@@ -886,7 +826,7 @@ Kliknij **"Generuj (AI)"** aby automatycznie wybrać najlepsze cechy z mapy kore
 | Sprzedaj ≤ | Próg sprzedaży | 30-40 |
 | SL | Stop Loss (% straty) | 3-5% |
 | TP | Take Profit (% zysku) | 10-20% lub 0 |
-| Trailing | Trailing Stop | Dla trendów |
+| Trailing | Trailing Stop (SL kroczący) | Dla trendów  |
 
 ### Krok 2: Uruchom symulację
 - Kliknij **"Start"**
@@ -1473,12 +1413,7 @@ Typ predykcji: % Zmiana Ceny
 Epoki: 200
 MF: 3 (Gauss)
 Horyzont: 5-10 dni
-Backtest: SL=10%, TP=0 (trend following)
 ```
 
 ---
 
-**Koniec dokumentacji**
-
-*ANFIS Pro - Investor Assistant v2.0*  
-*© 2025 - Dokumentacja wygenerowana automatycznie*
