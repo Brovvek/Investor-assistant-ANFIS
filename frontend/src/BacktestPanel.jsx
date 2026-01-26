@@ -7,9 +7,9 @@ const BacktestPanel = ({ ticker, config }) => {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   
-  const [buyThresh, setBuyThresh] = useState(65);
+  const [buyThresh, setBuyThresh] = useState(60);
   const [sellThresh, setSellThresh] = useState(35);
-  const [stopLoss, setStopLoss] = useState(5);
+  const [stopLoss, setStopLoss] = useState(100);
   const [takeProfit, setTakeProfit] = useState(0);
   const [trailingStop, setTrailingStop] = useState(false);
 
@@ -126,7 +126,7 @@ const BacktestPanel = ({ ticker, config }) => {
       <div className="controls-row backtest-controls">
         
         <div className="control-group">
-          <span className="control-label">Sygnały ANFIS</span>
+          <span className="control-label">Sygnały FIS</span>
           <div className="control-inputs">
             <label>Kup &ge;</label>
             <input type="number" value={buyThresh} onChange={e => setBuyThresh(e.target.value)} className="input-small" />
