@@ -35,7 +35,7 @@ function App() {
     <div className="container">
       <div className="header">
         <div className="title">
-          Investor Assistant <span className="highlight">ANFIS</span> Pro
+          Investor Assistant
         </div>
       </div>
 
@@ -72,7 +72,7 @@ function App() {
       </CollapsibleSection>
 
       {/* 3. GŁÓWNY WYKRES */}
-      <CollapsibleSection title="📈 Wykres Analityczny (Cena + ANFIS)" defaultOpen={true}>
+      <CollapsibleSection title="📈 Wykres Analityczny (Cena + FIS)" defaultOpen={true}>
         <div className="chart-container-600"><MarketChart data={chartData} /></div>
       </CollapsibleSection>
 
@@ -82,7 +82,7 @@ function App() {
       </CollapsibleSection>
 
       {/* 5. BACKTEST */}
-      <CollapsibleSection title="💰 Symulator Strategii (Backtest)" defaultOpen={false}>
+      <CollapsibleSection title="💰 Symulator Strategii FIS(Backtest)" defaultOpen={false}>
         <BacktestPanel ticker={ticker} config={indicatorsConfig} />
       </CollapsibleSection>
     </div>

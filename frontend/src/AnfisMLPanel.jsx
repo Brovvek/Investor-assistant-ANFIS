@@ -47,6 +47,7 @@ const AnfisMLPanel = ({ ticker, config }) => {
       setSelectedIds(new Set());
       setExpandedIds(new Set());
     } catch (err) {
+      console.log('Błąd pobierania historii: ' + err.message);
       setTrainingHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -161,7 +162,9 @@ const AnfisMLPanel = ({ ticker, config }) => {
                 setRawResponse(JSON.stringify(data, null, 2).slice(0, 2000));
                 setResults(data); setProgress(100);
               } else if (data.status === 'error') setError(data.message);
-            } catch (e) {}
+            } catch (e) {
+              console.log('Błąd parsowania danych strumieniowych: ' + e.message);
+            }
           }
         }
       }
