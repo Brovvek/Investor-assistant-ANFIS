@@ -167,6 +167,8 @@ def analyze():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
+    time_window = int(req_data.get('timeWindow', 1260))  # Default: 1260 days (~5 years)
+    
     try:
         df = prepare_data_with_features(ticker)
         if df.empty: return jsonify({"error": "Brak danych"}), 400
@@ -174,7 +176,7 @@ def analyze():
         fuzzy_expert.build_system(config)
         
         oscillator_values = []
-        df_analysis = df.tail(1260).copy()
+        df_analysis = df.tail(time_window).copy()
         active_features = [k for k, v in config.items() if v.get('enabled')]
 
         for index, row in df_analysis.iterrows():
@@ -195,6 +197,7 @@ def run_backtest():
     req_data = request.json
     ticker = req_data.get('ticker', '^GSPC')
     config = req_data.get('config', {})
+    time_window = int(req_data.get('timeWindow', 1260))  # Default: 1260 days (~5 years)
     
     buy_thr = float(req_data.get('buyThreshold', 70))
     sell_thr = float(req_data.get('sellThreshold', 30))
@@ -207,7 +210,7 @@ def run_backtest():
         fuzzy_expert.build_system(config)
         
         oscillator_values = []
-        df_analysis = df.tail(1260).copy()
+        df_analysis = df.tail(time_window).copy()
         active_features = [k for k, v in config.items() if v.get('enabled')]
         
         print(f"Backtest: Analiza {len(df_analysis)} wierszy dla {ticker}")

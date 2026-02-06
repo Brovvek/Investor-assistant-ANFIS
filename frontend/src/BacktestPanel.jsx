@@ -3,7 +3,7 @@ import axios from 'axios';
 import Plot from 'react-plotly.js';
 import './App.css';
 
-const BacktestPanel = ({ ticker, config }) => {
+const BacktestPanel = ({ ticker, config, timeWindow }) => {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   
@@ -18,7 +18,7 @@ const BacktestPanel = ({ ticker, config }) => {
     setResults(null);
     try {
       const response = await axios.post('http://127.0.0.1:5000/api/backtest', {
-        ticker, config,
+        ticker, config, timeWindow,
         buyThreshold: parseFloat(buyThresh),
         sellThreshold: parseFloat(sellThresh),
         stopLoss: parseFloat(stopLoss),
